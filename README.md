@@ -70,3 +70,42 @@ Also leaves server if not in room, still gets 9a 00 in that case. \disconnect do
 to send anything, so it's probably only client side and lets it time out. 
 
 
+
+
+Proposed Technique Outline (in terms of changes to existing code):
+
+REMEMBER, WE'RE DESIGNING THE CLIENTS AND SERVERS, SO WE CAN CHANGE THE MESSAGE FORMATTING ANY WAY WE WANT
+AS LONG AS THE TWO COORDINATE
+
+3.1: Basic Chat
+    
+    a)  High-Level: The application will consist of a central server program and the user client     
+        programs. Users can create password-protected rooms in which all room members will received room messages, or directly message another user. These messages can also consist of files, at which point the file transfer protocol will be initiated. Logging will be done on the server to track attempts and seek out authentication or message traffic anomalies, but no chat records will be stored. Any failures in key generation or message or file sending/verification will result in error messages being sent to the appropriate parties.
+    
+    b)  Low-Level:
+    
+        - Room.__init__: The room class currently stores its password in plain text, so need to change it to being a salted hash. 
+        
+        - Room.join: Change the equality check to comparisons of the hashed attempt with the stored one.
+
+        - I think there already exists hardcoded error messages spread throughout the program. Might be easier to convert to a single function that takes in an error string, and formats the message correctly.
+
+3.3: User Authentication & Key Generation
+
+    a) High-Level: Should we even have user logins? Currently we don't. It could just be anonymous, with each client connection essentially treated as a new user. Regardless, at registration, each user will locally generate an RSA public/private key pair. The user will store the private key locally, and send the public key to the server (doesn't need to be encrypted, right?). For each chat session, whether via room generation or direct message, a shared AES key will be generated. Whenever a user logs off, their keys are deleted and must be regenerated. Not ideal, but as of now we're not adding any integrity checks to the key sendings.
+
+    b) Low-Level:
+
+        - Yeah, let's not have a user login
+
+        - On the client side, the first thing it should do is generate an RSA public/private key pair. Store it locally in a file (don't think we need to worry about encrypting it). Send the public key to the server. Make a new message format for both the client and server, and have the client send and the server receive as part of the startup transaction. Add a RSA_public field to the User class, and assign it in User.__init__.
+
+        - Room generation and joining:
+        Server: 
+            Room.__init__: Create an AES key and send to the user, encrypted via the user's public key (might need a getter to help with getting the various keys).
+            Room.join: Send the room's AES key, same as init, but without generation.
+
+        Client:
+            Room join request: Send the request, and read the AES key, decrypt it, and store it locally.
+
+
