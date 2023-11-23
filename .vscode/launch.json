@@ -1,0 +1,34 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        
+        {
+            "name": "Python: Server",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/server_stuff/__main__.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--port", "20000"
+            ]
+        },
+
+        {
+            "name": "Python: Client",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/client.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--host", "127.0.0.1",
+                "--port", "20000"
+            ]
+        }
+    ]
+}

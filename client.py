@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import select
 import socket
 import sys
 import argparse
@@ -7,17 +8,83 @@ import struct
 import threading
 import time
 
+HEADER_LEN = 7 # The length in bytes of header. Includes data len, 04 17, and instruction
+
+# A receive all function for the socket (keep receiving until all bytes gotten)
+# Returns none if nothing more to receive
+def recv_all(sock:socket, size) -> bytearray:
+    
+    data = bytearray()
+    
+    while len(data) < size:
+        seg = sock.recv(size - len(data))
+
+        if not seg: # Return none if nothing received
+            return None
+
+        data.extend(seg)
+    
+    return data
+
 def send_message(sock, instruction, data=b''):
+    """
+    Packs and sends a message.
+    """
     header = struct.pack('>I B B', len(data) + 1, 0x04, 0x17)  # data_len, 0x0417
     message = header + bytes([instruction]) + data
     sock.sendall(message)
 
 def receive_response(sock):
     try:
-        response = sock.recv(1024)  # Buffer size might need to be adjusted
-        print("Received:", response)
+        # Read in data len, header stuff, and instruction code. Always 7 bytes
+        header = recv_all(sock, HEADER_LEN)
+
+        # If there's no data, it must have closed the connection, so remove from everything
+        if not header:
+            return None
+        
+        # Extract main things and update latest time
+        data_len = int.from_bytes(header[:4], byteorder='big')
+        instr = header[6]
+
+        # If message is a simple system message (an error or just a carrier for
+        # non-encrypted data)
+        if instr == 0x9a:
+           is_error = recv_all(sock, 1)
+
+           # If it's just a carrier message for non-encrypted stuff, just print it
+           if (is_error == 0):
+                print("Server request confirmed complete.")
+           else:
+               msg = recv_all(sock, data_len - 1)
+               print(f"{msg.decode()}")
+
     except socket.error as e:
         print(f"Error receiving response: {e}")
+
+def listen_for_messages(sock):
+    try:
+        while True:
+            # Poll the socket to see if it has data
+            ready_to_read, _, _ = select.select([sock], [], [], 1)
+
+            # If there's data on the socket, read it
+            if ready_to_read:
+                response = receive_response(sock)
+                if response is None:
+                    print("Server closed the connection.")
+                    break
+                # Handle the response
+                # For example, print it, update the UI, etc.
+            else:
+                # No data available, can perform other tasks or just continue the loop
+                # This is where you can add code for other tasks if needed
+                pass
+
+    except socket.error as e:
+        print(f"Socket error: {e}")
+    except Exception as e:
+        print(f"Error receiving messages: {e}")
 
 def change_nickname(sock, new_nickname):
     nickname_len = struct.pack('>B', len(new_nickname))  # Nickname length
@@ -63,6 +130,9 @@ def main(server_host, server_port):
             print(f"Error connecting to server: {e}")
             sys.exit(1)
 
+        listening_thread = threading.Thread(target=listen_for_messages, args=(sock,))
+        listening_thread.start()
+
         # Main loop to interact with the server based on user commands
         while True:
             try:
@@ -87,6 +157,8 @@ def main(server_host, server_port):
                     send_direct_message(sock, username, message)
                 elif command == 'leave':
                     leave_server(sock)
+                    listening_thread.cancel()
+                    heartbeat_thread.cancel()
                 elif command == 'quit':
                     heartbeat_thread.cancel()  # Stop the heartbeat before exiting
                     print("Exiting client.")
@@ -97,10 +169,12 @@ def main(server_host, server_port):
                 receive_response(sock)
             except KeyboardInterrupt:
                 heartbeat_thread.cancel()  # Stop the heartbeat before exiting
+                listening_thread.cancel()
                 print("\nInterrupted by user, exiting.")
                 break
             except Exception as e:
                 heartbeat_thread.cancel()  # Stop the heartbeat on error
+                listening_thread.cancel()
                 print(f"An error occurred: {e}")
                 break
 

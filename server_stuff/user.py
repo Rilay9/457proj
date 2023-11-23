@@ -13,6 +13,7 @@ class User:
         self.sock:socket = sock
         self.room = None
         self.time_last_updated = time.time()
+        self.rsaPubKey = None # The client should be sending this right after joining
         
         # Holds the last 4 times a message was sent in order to send error if 
         # sending too much. Should only be 4 or less, as it serves as a sliding window
