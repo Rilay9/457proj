@@ -14,7 +14,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--port", "20000"
+                "-p", "20000"
             ]
         },
 

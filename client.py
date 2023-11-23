@@ -51,13 +51,14 @@ def receive_response(sock):
         # non-encrypted data)
         if instr == 0x9a:
            is_error = recv_all(sock, 1)
+           data_len = data_len - 1
 
            # If it's just a carrier message for non-encrypted stuff, just print it
            if (is_error == 0):
-                print("Server request confirmed complete.")
-           else:
-               msg = recv_all(sock, data_len - 1)
-               print(f"{msg.decode()}")
+                print("Server request confirmed complete.\n")
+           if data_len > 0:
+               msg = recv_all(sock, data_len)
+               print(f"{msg.decode()}\n")
 
     except socket.error as e:
         print(f"Error receiving response: {e}")
@@ -124,6 +125,14 @@ def main(server_host, server_port):
         try:
             sock.connect((server_host, server_port))
             print(f"Connected to server at {server_host}:{server_port}")
+            sock.sendall(bytes([0x00, 0x00, 0x00, 0x2d, 0x04, 0x17, 0x9b, 0x41,
+                0x20, 0x6c, 0x6f, 0x6e, 0x67, 0x20, 0x74, 0x69,
+                0x6d, 0x65, 0x20, 0x61, 0x67, 0x6f, 0x20, 0x69,
+                0x6e, 0x20, 0x61, 0x20, 0x63, 0x68, 0x61, 0x74,
+                0x20, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x20,
+                0x66, 0x61, 0x72, 0x20, 0x66, 0x61, 0x72, 0x20,
+                0x61, 0x77, 0x61, 0x79]))
+            receive_response(sock)
             heartbeat_thread = threading.Timer(5, heartbeat, [sock])
             heartbeat_thread.start()
         except Exception as e:
@@ -166,7 +175,6 @@ def main(server_host, server_port):
                 else:
                     print("Unknown command.")
                 
-                receive_response(sock)
             except KeyboardInterrupt:
                 heartbeat_thread.cancel()  # Stop the heartbeat before exiting
                 listening_thread.cancel()
