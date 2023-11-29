@@ -3,7 +3,10 @@
 
 import socket
 import time
+from Crypto.PublicKey import RSA
+from room import Room
 
+#Todo: Set public key, function exists at the bottom, just need to call it
 class User:
     
     all_users = {}
@@ -13,8 +16,8 @@ class User:
         self.sock:socket = sock
         self.room = None
         self.time_last_updated = time.time()
-        self.rsaPubKey = None # The client should be sending this right after joining
         
+        self.rsaPubKey = None
         # Holds the last 4 times a message was sent in order to send error if 
         # sending too much. Should only be 4 or less, as it serves as a sliding window
         self.last_message_times = [] 
@@ -125,3 +128,12 @@ class User:
                 return user
 
         return None
+    
+    def set_rsa_public_key(self, public_key_data: bytes) -> None:
+        """
+        Sets the RSA public key for the user.
+
+        Parameters:
+        - public_key_data (bytes): The RSA public key in byte format.
+        """
+        self.rsaPubKey = RSA.import_key(public_key_data)

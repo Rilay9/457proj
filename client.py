@@ -7,8 +7,10 @@ import argparse
 import struct
 import threading
 import time
-
+from Crypto.Cipher import PKCS1_OAEP
+import Crypto
 HEADER_LEN = 7 # The length in bytes of header. Includes data len, 04 17, and instruction
+KEY_LEN = 32 # The length in bytes of the AES key
 
 # A receive all function for the socket (keep receiving until all bytes gotten)
 # Returns none if nothing more to receive
@@ -62,6 +64,11 @@ def receive_response(sock):
 
     except socket.error as e:
         print(f"Error receiving response: {e}")
+
+
+# TODO:Room join request: Send the request, and read the returned AES key, decrypt it, and store it locally. 
+# Can only be in one room at a time, so can just overwrite existing room key and have a single roomKey AES variable.
+# Client needs to also listen for any rsa pub and AES key messages and add them to its dicts.
 
 def listen_for_messages(sock):
     try:
@@ -120,11 +127,42 @@ def heartbeat(sock, interval=5):
     send_message(sock, 0x13)
     threading.Timer(interval, heartbeat, [sock, interval]).start()
 
+def handle_aes_key_message(sock, rsa_private_key):
+    """
+    Receives and decrypts the AES key message.
+
+    Parameters:
+    - sock (socket.socket): The socket connected to the server.
+    - rsa_private_key (RSA.RsaKey): The RSA private key for decryption.
+    """
+    # Assuming the message format and length are known
+    # Extract the encrypted AES key from the message
+    encrypted_aes_key = recv_all(sock, KEY_LEN)
+
+    # Decrypt the AES key
+    cipher_rsa = PKCS1_OAEP.new(rsa_private_key)
+    aes_key = cipher_rsa.decrypt(encrypted_aes_key)
+    return aes_key
+def send_rsa_public_key(sock, rsa_public_key):
+    """
+    Sends the RSA public key to the server.
+
+    Parameters:
+    - sock (socket.socket): The socket connected to the server.
+    - rsa_public_key (RSA.RsaKey): The RSA public key to send.
+    """
+    public_key_data = rsa_public_key.export_key()
+    send_message(sock, 0x81, public_key_data)
+
+
 def main(server_host, server_port):
+    rsa_private_key, rsa_public_key = generate_rsa_keys()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         try:
             sock.connect((server_host, server_port))
             print(f"Connected to server at {server_host}:{server_port}")
+            rsa_private_key, rsa_public_key = generate_rsa_keys()
+            send_rsa_public_key(sock, rsa_public_key)
             sock.sendall(bytes([0x00, 0x00, 0x00, 0x2d, 0x04, 0x17, 0x9b, 0x41,
                 0x20, 0x6c, 0x6f, 0x6e, 0x67, 0x20, 0x74, 0x69,
                 0x6d, 0x65, 0x20, 0x61, 0x67, 0x6f, 0x20, 0x69,
@@ -157,6 +195,7 @@ def main(server_host, server_port):
                     room_name = input("Enter room name: ")
                     password = input("Enter password (if any): ")
                     join_room(sock, room_name, password)
+                    room_key = handle_aes_key_message(sock, rsa_private_key)
                 elif command == 'send_room_msg':
                     message = input("Enter message to send to room: ")
                     send_room_message(sock, message)

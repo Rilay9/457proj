@@ -15,7 +15,16 @@ HEADER_LEN = 7 # The length in bytes of header. Includes data len, 04 17, and in
 def server_confirm(sock):
     sock.sendall(bytes([0x00, 0x00, 0x00, 0x01, 0x04, 0x17, 0x9a, 0x00]))
 
-# Closes user and cleans things up
+# def handle_client_connection(client_socket):
+#     while True:
+#         message = receive_message(client_socket)
+#         if message.instruction_code == 0x81:
+#             rsa_public_key = extract_rsa_public_key(message.data)
+#             associate_public_key_with_client(client_socket, rsa_public_key)
+#             # Continue with other startup tasks
+#         # Handle other types of messages
+# # Closes user and cleans things up
+
 def close_user(user:User):
     
     # Close socket if not already
