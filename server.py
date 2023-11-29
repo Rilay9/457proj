@@ -17,7 +17,7 @@ def server_confirm(sock):
 
 # Closes user and cleans things up
 def close_user(user:User):
-    print("user is closing ", user)
+    
     # Close socket if not already
     if user.sock.fileno() != -1:
         user.sock.close()
@@ -39,34 +39,29 @@ def recv_all(sock:socket, size) -> bytearray:
     
     while len(data) < size:
         seg = sock.recv(size - len(data))
-        print("seg data === ", seg, size, len(seg))
+
         if not seg: # Return none if nothing received
             return None
 
         data.extend(seg)
-    print("data in recv all === ", data, seg)
+    
     return data
 
 # Accepts new connection and receives and responds to connect message.
 def accept_new(sock, sel: selectors.DefaultSelector):
-    print("================= new client =================")
     # Accept connection and create new user
     try:
         conn, _ = sock.accept() # Don't need address
     except socket.error:
-        import traceback
-        traceback.print_exc()
-        print("Error on server accept connection 1", file=sys.stderr)
+        print("Error on server accept connection", file=sys.stderr)
         return
     
     # Receive the client connect message. Assumes always the correct 52 bytes (for now)
-    print("wating for stuff")
-    b = recv_all(conn, 21)
-    print(len(b))
-    if (len(b) != 21):
+    if (recv_all(conn, 21)) is None:
         conn.close()
-        print("Error on server accept connection 2", file=sys.stderr)
+        print("Error on server accept connection", file=sys.stderr)
         return
+    
     # If worked, create and add the new user to the server list, and add the socket to
     # selector. Oh and send response
     else:
@@ -75,7 +70,7 @@ def accept_new(sock, sel: selectors.DefaultSelector):
         new_user = User(conn) 
 
         # Construct response components
-        header_b = b'\x04\x17\x9a'
+        header_b = b'\x04\x17\x9b'
         err_code_b = b'\x00'
         username_b = new_user.name.encode() # Need to encode, default is utf-8
         username_len = len(username_b)
@@ -83,7 +78,7 @@ def accept_new(sock, sel: selectors.DefaultSelector):
 
         # Concatenates all bytes together
         send_buffer = data_len + header_b + err_code_b + username_b
-
+        print("inside accept")
         try:
             conn.sendall(send_buffer)
         except socket.error:
@@ -92,8 +87,7 @@ def accept_new(sock, sel: selectors.DefaultSelector):
             return
 
         sel.register(conn, selectors.EVENT_READ, data=True)
-        print("Done registering user")
-    
+     
 # Processes the client messages
 def process_client_msg(key: selectors.SelectorKey):
     
@@ -102,7 +96,7 @@ def process_client_msg(key: selectors.SelectorKey):
 
     # Read in data len, header stuff, and instruction code. Always 7 bytes
     header = recv_all(sock, HEADER_LEN)
-
+    print("header", header)
     # If there's no data, it must have closed the connection, so remove from everything
     if not header:
         sel.unregister(sock)
@@ -114,20 +108,20 @@ def process_client_msg(key: selectors.SelectorKey):
         data_len = int.from_bytes(header[:4], byteorder='big')
         instr = header[6]
         user.update_time()
-        print("header = ", header)
+
         # If it's simply the heartbeat, it's a fixed size message, so simply recv it
         # and update the timer for the user.
-        print("Instruction = ", hex(instr), " Data length = ", data_len)
         if instr == 0x13:
             recv_all(sock, data_len)
             
+        
         # Nickname request. Data will be nickname len (1 byte long) and then nickname.
         # I think client checks to make sure it's the right size
         elif instr == 0x0f:
-            print("new_nickname request")
+            
             # Get rest of message
             the_rest = recv_all(sock, data_len)
-            print("the rest   ", the_rest)
+
             # Parse username, should just be from after len to end
             new_name = the_rest[1:].decode()
             old_name = user.name
@@ -141,6 +135,9 @@ def process_client_msg(key: selectors.SelectorKey):
                 del room.room_users[old_name]
                 room.room_users[new_name] = user
 
+            
+
+        
         # User list request. This instruction has 0 data_len, so just update time, and send list.
         # If in room send users in room, otherwise send all in server.
         elif instr == 0x0c:
@@ -155,9 +152,9 @@ def process_client_msg(key: selectors.SelectorKey):
                 name_b = name.encode()
                 name_len_b = len(name_b).to_bytes(1, 'little')
                 data += name_len_b + name_b
-
+            print(len(data) + 1, (len(data) + 1).to_bytes(4, 'big'))
             # Set full data_len (+1 for no_err) and header. Big-endian to pad 0s in front
-            send_buffer = (len(data) + 1).to_bytes(4, 'big') + b'\x04\x17\x9a\x00' + data
+            send_buffer = (len(data) + 1).to_bytes(4, 'big') + b'\x04\x17\x9c\x00' + data
 
             sock.sendall(send_buffer)
 
@@ -289,9 +286,9 @@ def process_client_msg(key: selectors.SelectorKey):
         # Direct message request. Similar to room message. Has same time limit for 5 msgs.
         # If user doesn't exist, sends 9a 01 fixed len error message
         elif instr == 0x12:
-            print(" ================   in direct message data len = ", data_len)
+
             the_rest = recv_all(sock, data_len)
-            print("         the rest == ", the_rest)
+            
             # Check if too many message requests
             if user.is_msg_overload():
                 # Send "Hold your fire. There's no life forms." 9a 02 error fixed len message
@@ -306,12 +303,11 @@ def process_client_msg(key: selectors.SelectorKey):
                 # Get the info based on offsets
                 recv_uname_len = the_rest[0]
                 recv_uname = the_rest[1:1+recv_uname_len].decode()
-                msg_len_b = the_rest[2+recv_uname_len] # Theres a 0x00 in between
+                msg_len_b = the_rest[2+recv_uname_len] # There's a 0x00 in between
                 msg_b = the_rest[3+recv_uname_len:]
 
                 # Check if receiver user exists
                 recv_user = User.all_users.get(recv_uname, None)
-                print("recieved user == ", recv_user, recv_uname)
                 if recv_user is None:
                     # Send fixed len error message that user doesn't exist
                     sock.sendall(bytes([0x00, 0x00, 0x00, 0x29, 0x04, 0x17, 0x9a, 0x01, \
@@ -335,7 +331,6 @@ def process_client_msg(key: selectors.SelectorKey):
         elif instr == 0x06:
             if user.room is None:
                 # Close user
-                print("closing user !!!!!!")
                 sel.unregister(sock)
                 server_confirm(sock)
                 close_user(user)
@@ -382,15 +377,17 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
 
     # Loop over sockets and process them accordingly
     while True:
+
+    
         # Check the sockets, and iterate over events
         try:
-            print("waiting for event")
             events = sel.select(timeout=30)
+            print(events)
         except:
             break # To avoid exception being printed on interrupt
 
         for key, mask in events:
-            print(key, mask)
+            
             # If there's a timeout, all clients have timed out, so close 'em
             if not events: 
                 for user in User.all_users.values():
@@ -400,7 +397,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
             # If data is still None, it's the server socket which just
             # received a new connection request
             elif key.data is None:
-                print(key.fileobj)
+                print("going to accept")
                 accept_new(key.fileobj, sel)
             
             # Otherwise, a client has sent some data
@@ -418,7 +415,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
         for user in users_to_remove:        
             sel.unregister(user.sock)
             close_user(user)
-
 
 
 
