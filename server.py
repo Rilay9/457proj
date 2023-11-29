@@ -11,6 +11,11 @@ from room import Room
 
 HEADER_LEN = 7 # The length in bytes of header. Includes data len, 04 17, and instruction
 
+def send_message(sock, instruction, data=b''):
+    header = (len(data)).to_bytes(4, 'big') + b'\x04\x17'  # data_len, 0x04179a00
+    message = header + bytes([instruction]) + data
+    b = sock.sendall(message)
+
 # Send confirmation message (data_len 04 17 9a no_err, if i understand right)
 def server_confirm(sock):
     sock.sendall(bytes([0x00, 0x00, 0x00, 0x01, 0x04, 0x17, 0x9a, 0x00]))
@@ -56,7 +61,7 @@ def accept_new(sock, sel: selectors.DefaultSelector):
         print("Error on server accept connection", file=sys.stderr)
         return
     
-    # Receive the client connect message. Assumes always the correct 52 bytes (for now)
+    # Receive the client connect message. Assumes always the correct 21 bytes (for now)
     if (recv_all(conn, 21)) is None:
         conn.close()
         print("Error on server accept connection", file=sys.stderr)
@@ -78,7 +83,7 @@ def accept_new(sock, sel: selectors.DefaultSelector):
 
         # Concatenates all bytes together
         send_buffer = data_len + header_b + err_code_b + username_b
-        print("inside accept")
+
         try:
             conn.sendall(send_buffer)
         except socket.error:
@@ -89,14 +94,13 @@ def accept_new(sock, sel: selectors.DefaultSelector):
         sel.register(conn, selectors.EVENT_READ, data=True)
      
 # Processes the client messages
-def process_client_msg(key: selectors.SelectorKey):
+def process_client_msg(key: selectors.SelectorKey, sel):
     
     sock = key.fileobj # Client socket
     user:User = User.get_user_by_sock(sock) # Added type hint for autocompletes
 
     # Read in data len, header stuff, and instruction code. Always 7 bytes
     header = recv_all(sock, HEADER_LEN)
-    print("header", header)
     # If there's no data, it must have closed the connection, so remove from everything
     if not header:
         sel.unregister(sock)
@@ -133,9 +137,7 @@ def process_client_msg(key: selectors.SelectorKey):
             if user.room is not None:
                 room = Room.all_rooms[user.room]
                 del room.room_users[old_name]
-                room.room_users[new_name] = user
-
-            
+                room.room_users[new_name] = user                        
 
         
         # User list request. This instruction has 0 data_len, so just update time, and send list.
@@ -152,7 +154,7 @@ def process_client_msg(key: selectors.SelectorKey):
                 name_b = name.encode()
                 name_len_b = len(name_b).to_bytes(1, 'little')
                 data += name_len_b + name_b
-            print(len(data) + 1, (len(data) + 1).to_bytes(4, 'big'))
+
             # Set full data_len (+1 for no_err) and header. Big-endian to pad 0s in front
             send_buffer = (len(data) + 1).to_bytes(4, 'big') + b'\x04\x17\x9c\x00' + data
 
@@ -172,10 +174,7 @@ def process_client_msg(key: selectors.SelectorKey):
                 name_len_b = len(name_b).to_bytes(1, 'little')
                 data += name_len_b + name_b
 
-            # Set full data_len (+1 for no_err) and header. Big-endian to pad 0s in front
-            send_buffer = (len(data) + 1).to_bytes(4, 'big') + b'\x04\x17\x9a\x00' + data
-
-            sock.sendall(send_buffer)
+            send_message(sock, 0x9a, data)
 
 
         # Room join request. Creates room if it doesn't exist, tries to join if it does.
@@ -191,17 +190,8 @@ def process_client_msg(key: selectors.SelectorKey):
                 else the_rest[2+room_name_len:].decode()
 
             # If already in room, send the appropriate error message
-            # Again, it's fixed length message so copied from wireshark
             if room_name == user.room:
-                sock.sendall(bytes([0x00, 0x00, 0x00, 0x3c, 0x04, 0x17, 0x9a, 0x01, \
-                                    0x59, 0x6f, 0x75, 0x27, 0x72, 0x65, 0x20, 0x61, \
-                                    0x6c, 0x72, 0x65, 0x61, 0x64, 0x79, 0x20, 0x69, \
-                                    0x6e, 0x20, 0x74, 0x68, 0x69, 0x73, 0x20, 0x72, \
-                                    0x6f, 0x6f, 0x6d, 0x2e, 0x20, 0x44, 0x6f, 0x20, \
-                                    0x6f, 0x72, 0x20, 0x64, 0x6f, 0x20, 0x6e, 0x6f, \
-                                    0x74, 0x2e, 0x20, 0x54, 0x68, 0x65, 0x72, 0x65, \
-                                    0x20, 0x69, 0x73, 0x20, 0x6e, 0x6f, 0x20, 0x74, \
-                                    0x72, 0x79, 0x2e]))
+                send_message(sock, 0x9a, b'Already in room')
 
             # Else check if room exists
             else:
@@ -210,20 +200,16 @@ def process_client_msg(key: selectors.SelectorKey):
 
                     # Try to join room, send the appropriate message upon result
                     if room.join(user, password):
-                        server_confirm(sock)
+                        send_message(sock, 0x9a, b'Joined room ' + room_name.encode())
                     
                     else:
                         # Password must have failed, send error message
-                        sock.sendall(bytes([0x00, 0x00, 0x00, 0x1e, 0x04, 0x17, 0x9a, 0x01, \
-                                            0x49, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x20, \
-                                            0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64, \
-                                            0x2e, 0x20, 0x49, 0x74, 0x27, 0x73, 0x20, 0x61, \
-                                            0x20, 0x74, 0x72, 0x61, 0x70]))
+                        send_message(sock, 0x9a, b'Incorrect password')
                 
                 # If room doesn't exist, create it. (adds to static map of rooms)
                 else:
                     Room(user, room_name, password)  
-                    server_confirm(sock)
+                    send_message(sock, 0x9a, b'Created and joined room ' + room_name.encode())
 
         
         # Send message to room. If not in room, send 9a 01 error, otherwise send to users in room.
@@ -234,24 +220,14 @@ def process_client_msg(key: selectors.SelectorKey):
 
             # Check if too many message requests
             if user.is_msg_overload():
-                # Send "Hold your fire. There's no life forms." 9a 02 error fixed len message
-                sock.sendall(bytes([0x00, 0x00, 0x00, 0x27, 0x04, 0x17, 0x9a, 0x02, \
-                                    0x48, 0x6f, 0x6c, 0x64, 0x20, 0x79, 0x6f, 0x75, \
-                                    0x72, 0x20, 0x66, 0x69, 0x72, 0x65, 0x2e, 0x20, \
-                                    0x54, 0x68, 0x65, 0x72, 0x65, 0x27, 0x73, 0x20, \
-                                    0x6e, 0x6f, 0x20, 0x6c, 0x69, 0x66, 0x65, 0x20, \
-                                    0x66, 0x6f, 0x72, 0x6d, 0x73, 0x2e]))
+                # 
+                send_message(sock, 0x9a, b'Slow down ya maniac!')
+
             else:
                 # Check if in room
                 if user.room == None:
-                    # Send "(You speak to no one. There is no one here.)" 9a 01 error
-                    sock.sendall(bytes([0x00, 0x00, 0x00, 0x2b, 0x04, 0x17, 0x9a, 0x01, \
-                                        0x59, 0x6f, 0x75, 0x20, 0x73, 0x70, 0x65, 0x61, \
-                                        0x6b, 0x20, 0x74, 0x6f, 0x20, 0x6e, 0x6f, 0x20, \
-                                        0x6f, 0x6e, 0x65, 0x2e, 0x20, 0x54, 0x68, 0x65, \
-                                        0x72, 0x65, 0x20, 0x69, 0x73, 0x20, 0x6e, 0x6f, \
-                                        0x20, 0x6f, 0x6e, 0x65, 0x20, 0x68, 0x65, 0x72, \
-                                        0x65, 0x2e]))
+                    send_message(sock, 0x9a, b"Yo, you're the only one in the room")
+                                 
                 else:
                     # Send message to all other users in room and send confirm message
                     
@@ -271,13 +247,11 @@ def process_client_msg(key: selectors.SelectorKey):
                     data = room_name_len_b.to_bytes(1, 'little') + room_name_b \
                           + username_len_b + username_b + b'\x00' \
                           + msg_len_b.to_bytes(1, 'little') + msg_b
-                    
-                    send_buf = len(data).to_bytes(4, 'big') + b'\x04\x17\x15' + data
 
                     # Iterate over all users in room and send them the message (not to self though)
                     for room_user in room.room_users.values():
                         if room_user.name != user.name:
-                            room_user.sock.sendall(send_buf)
+                            send_message(room_user.sock, 0x15, data)
 
                     # Send confirmation to og user
                     server_confirm(sock)  
@@ -292,12 +266,7 @@ def process_client_msg(key: selectors.SelectorKey):
             # Check if too many message requests
             if user.is_msg_overload():
                 # Send "Hold your fire. There's no life forms." 9a 02 error fixed len message
-                sock.sendall(bytes([0x00, 0x00, 0x00, 0x27, 0x04, 0x17, 0x9a, 0x02, \
-                                    0x48, 0x6f, 0x6c, 0x64, 0x20, 0x79, 0x6f, 0x75, \
-                                    0x72, 0x20, 0x66, 0x69, 0x72, 0x65, 0x2e, 0x20, \
-                                    0x54, 0x68, 0x65, 0x72, 0x65, 0x27, 0x73, 0x20, \
-                                    0x6e, 0x6f, 0x20, 0x6c, 0x69, 0x66, 0x65, 0x20, \
-                                    0x66, 0x6f, 0x72, 0x6d, 0x73, 0x2e]))
+                send_message(sock, 0x9a, b'Slow down ya maniac!')
                 
             else:
                 # Get the info based on offsets
@@ -310,21 +279,14 @@ def process_client_msg(key: selectors.SelectorKey):
                 recv_user = User.all_users.get(recv_uname, None)
                 if recv_user is None:
                     # Send fixed len error message that user doesn't exist
-                    sock.sendall(bytes([0x00, 0x00, 0x00, 0x29, 0x04, 0x17, 0x9a, 0x01, \
-                                        0x4e, 0x69, 0x63, 0x6b, 0x20, 0x6e, 0x6f, 0x74, \
-                                        0x20, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x74, \
-                                        0x2e, 0x20, 0x48, 0x65, 0x27, 0x73, 0x20, 0x67, \
-                                        0x6f, 0x6e, 0x65, 0x20, 0x74, 0x6f, 0x20, 0x41, \
-                                        0x6c, 0x64, 0x65, 0x72, 0x61, 0x61, 0x6e, 0x2e]))
+                    send_message(sock, 0x9a, b"Yo, that user doesn't exist")
                 else:
                     # Send user the message, and send sender the confirm message
                     sender_name_b = user.name.encode()
                     data = len(sender_name_b).to_bytes(1, 'little') + sender_name_b + b'\x00' \
                         + msg_len_b.to_bytes(1, 'little')+ msg_b
-                    send_buf = len(data).to_bytes(4, 'big') + b'\x04\x17\x12' + data
+                    send_message(recv_user.sock, 0x12, data)
 
-                    recv_user.sock.sendall(send_buf)
-                    server_confirm(sock)
 
         # Leave. Data len is 0, so no more to be received.
         # Close user if not in room, leave room if in one
@@ -332,13 +294,13 @@ def process_client_msg(key: selectors.SelectorKey):
             if user.room is None:
                 # Close user
                 sel.unregister(sock)
-                server_confirm(sock)
+                send_message(sock, 0x9a, 'Left server')
                 close_user(user)
             else:
                 # Leave room
                 room = Room.all_rooms[user.room]
                 room.remove(user)
-                server_confirm(sock)
+                send_message(sock, 0x9a, 'Left room')
         
         else:
             print("Invalid header received", file=sys.stderr)         
@@ -381,8 +343,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
     
         # Check the sockets, and iterate over events
         try:
-            events = sel.select(timeout=30)
-            print(events)
+            events = sel.select(timeout=-1)
         except:
             break # To avoid exception being printed on interrupt
 
@@ -397,19 +358,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
             # If data is still None, it's the server socket which just
             # received a new connection request
             elif key.data is None:
-                print("going to accept")
                 accept_new(key.fileobj, sel)
             
             # Otherwise, a client has sent some data
             else:
-                process_client_msg(key)
+                process_client_msg(key, sel)
 
         # Check if any users haven't updated in 30 seconds, and if they did, close them
         curr_time = time.time()
         users_to_remove = [] # Another list, in order to avoid changing dict in iter
-        for user in User.all_users.values():
-            if curr_time - user.time_last_updated > 30:
-                users_to_remove.append(user)
+        # for user in User.all_users.values():
+        #     if curr_time - user.time_last_updated > 30:
+        #         users_to_remove.append(user)
                 
         # Remove the users
         for user in users_to_remove:        

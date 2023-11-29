@@ -10,7 +10,7 @@
             "name": "Python: Server",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/server_stuff/__main__.py",
+            "program": "${workspaceFolder}/server.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
