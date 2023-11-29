@@ -56,7 +56,7 @@ def accept_new(sock, sel: selectors.DefaultSelector):
         print("Error on server accept connection", file=sys.stderr)
         return
     
-    # Receive the client connect message. Assumes always the correct 52 bytes (for now)
+    # Receive the client connect message. Assumes always the correct 21 bytes (for now)
     if (recv_all(conn, 21)) is None:
         conn.close()
         print("Error on server accept connection", file=sys.stderr)
@@ -78,7 +78,7 @@ def accept_new(sock, sel: selectors.DefaultSelector):
 
         # Concatenates all bytes together
         send_buffer = data_len + header_b + err_code_b + username_b
-        print("inside accept")
+
         try:
             conn.sendall(send_buffer)
         except socket.error:
@@ -96,7 +96,6 @@ def process_client_msg(key: selectors.SelectorKey):
 
     # Read in data len, header stuff, and instruction code. Always 7 bytes
     header = recv_all(sock, HEADER_LEN)
-    print("header", header)
     # If there's no data, it must have closed the connection, so remove from everything
     if not header:
         sel.unregister(sock)
@@ -152,7 +151,7 @@ def process_client_msg(key: selectors.SelectorKey):
                 name_b = name.encode()
                 name_len_b = len(name_b).to_bytes(1, 'little')
                 data += name_len_b + name_b
-            print(len(data) + 1, (len(data) + 1).to_bytes(4, 'big'))
+
             # Set full data_len (+1 for no_err) and header. Big-endian to pad 0s in front
             send_buffer = (len(data) + 1).to_bytes(4, 'big') + b'\x04\x17\x9c\x00' + data
 
@@ -381,8 +380,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
     
         # Check the sockets, and iterate over events
         try:
-            events = sel.select(timeout=30)
-            print(events)
+            events = sel.select(timeout=-1)
         except:
             break # To avoid exception being printed on interrupt
 
@@ -397,7 +395,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
             # If data is still None, it's the server socket which just
             # received a new connection request
             elif key.data is None:
-                print("going to accept")
                 accept_new(key.fileobj, sel)
             
             # Otherwise, a client has sent some data
@@ -407,9 +404,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
         # Check if any users haven't updated in 30 seconds, and if they did, close them
         curr_time = time.time()
         users_to_remove = [] # Another list, in order to avoid changing dict in iter
-        for user in User.all_users.values():
-            if curr_time - user.time_last_updated > 30:
-                users_to_remove.append(user)
+        # for user in User.all_users.values():
+        #     if curr_time - user.time_last_updated > 30:
+        #         users_to_remove.append(user)
                 
         # Remove the users
         for user in users_to_remove:        
