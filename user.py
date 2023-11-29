@@ -4,6 +4,12 @@
 import socket
 import time
 
+
+def send_message(sock, instruction, data=b''):
+    header = (len(data)).to_bytes(4, 'big') + b'\x04\x17'  # data_len, 0x04179a00
+    message = header + bytes([instruction]) + data
+    b = sock.sendall(message)
+
 class User:
     
     all_users = {}
@@ -41,23 +47,13 @@ class User:
                 User.all_users[new_name] = self
             
             # Send confirmation message (data_len 04 17 9a no_err, if i understand right)
-            self.sock.sendall(bytes([0x00, 0x00, 0x00, 0x01, 0x04, 0x17, 0x9a, 0x00]))
+            send_message(self.sock, 0x9a, b'Name changed.')
 
         else:
             # If already exists, send error message
             # (data_len 04 17 9a err_1 special set of skills msg).
             # Again, fixed length message, so just copied from wireshark as c array
-            self.sock.sendall(bytes([0x00, 0x00, 0x00, 0x4b, 0x04, 0x17, 0x9a, 0x01, \
-                                     0x54, 0x68, 0x69, 0x73, 0x20, 0x6e, 0x69, 0x63, \
-                                     0x6b, 0x20, 0x62, 0x65, 0x6c, 0x6f, 0x6e, 0x67, \
-                                     0x73, 0x20, 0x74, 0x6f, 0x20, 0x73, 0x6f, 0x6d, \
-                                     0x65, 0x6f, 0x6e, 0x65, 0x20, 0x65, 0x6c, 0x73, \
-                                     0x65, 0x2e, 0x20, 0x48, 0x65, 0x20, 0x68, 0x61, \
-                                     0x73, 0x20, 0x61, 0x20, 0x76, 0x65, 0x72, 0x79, \
-                                     0x20, 0x70, 0x61, 0x72, 0x74, 0x69, 0x63, 0x75, \
-                                     0x6c, 0x61, 0x72, 0x20, 0x73, 0x65, 0x74, 0x20, \
-                                     0x6f, 0x66, 0x20, 0x73, 0x6b, 0x69, 0x6c, 0x6c, \
-                                     0x73, 0x2e]))
+            send_message(self.sock, 0x9a, b'Name already exists.')
             
     # Update time. Sends "He's still alive but in a very deep sleep message" if 
     # it's been 20 seconds since last update
@@ -70,14 +66,7 @@ class User:
             
             # Just realized I could paste the correct bytes to send in their entirety
             # I understand the message
-            send_buffer = bytes([0x00, 0x00, 0x00, 0x26, 0x04, 0x17, 0x9a, 0x03, \
-                                 0x48, 0x65, 0x27, 0x73, 0x20, 0x61, 0x6c, 0x69, \
-                                 0x76, 0x65, 0x2c, 0x20, 0x62, 0x75, 0x74, 0x20, \
-                                 0x69, 0x6e, 0x20, 0x61, 0x20, 0x76, 0x65, 0x72, \
-                                 0x79, 0x20, 0x64, 0x65, 0x65, 0x70, 0x20, 0x73, \
-                                 0x6c, 0x65, 0x65, 0x70, 0x2e])
-            
-            self.sock.sendall(send_buffer)
+            send_message(self.sock, 0x9a, b'Careful, server times out client after 30 seconds of inactivity.')
 
     
     # Leaves room. Called from room remove() function, which is called only
