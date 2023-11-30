@@ -76,13 +76,12 @@ def accept_new(sock, sel: selectors.DefaultSelector):
 
         # Construct response components
         header_b = b'\x04\x17\x9b'
-        err_code_b = b'\x00'
         username_b = new_user.name.encode() # Need to encode, default is utf-8
         username_len = len(username_b)
         data_len = (username_len + 1).to_bytes(4, 'big') # Big endian to pad leading 0s
 
         # Concatenates all bytes together
-        send_buffer = data_len + header_b + err_code_b + username_b
+        send_buffer = data_len + header_b + username_len.to_bytes(1, 'little') + username_b
 
         try:
             conn.sendall(send_buffer)
@@ -200,7 +199,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
 
                     # Try to join room, send the appropriate message upon result
                     if room.join(user, password):
-                        send_message(sock, 0x91, bytes(len(room_name)) + room_name.encode())
+                        send_message(sock, 0x91, bytes([len(room_name)]) + room_name.encode())
                     
                     else:
                         # Password must have failed, send error message
@@ -209,7 +208,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                 # If room doesn't exist, create it. (adds to static map of rooms)
                 else:
                     Room(user, room_name, password)  
-                    send_message(sock, 0x93, bytes(len(room_name)) + room_name.encode())
+                    send_message(sock, 0x93, bytes([len(room_name)]) + room_name.encode())
 
         
         # Send message to room. If not in room, send 9a 01 error, otherwise send to users in room.
@@ -240,13 +239,13 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                     room_name_b = the_rest[1:1+room_name_len_b]
                     username_b = user.name.encode()
                     username_len_b = len(username_b).to_bytes(1, 'little')
-                    msg_len_b = the_rest[2+room_name_len_b]
-                    msg_b = the_rest[3+room_name_len_b:]
+                    msg_len = int.from_bytes(the_rest[1+room_name_len_b:5+room_name_len_b], 'big')
+                    msg_b = the_rest[5+room_name_len:]
 
                     # Put it all together (again, len(data) is set to big-endian to pad zeros)
                     data = room_name_len_b.to_bytes(1, 'little') + room_name_b \
                           + username_len_b + username_b + b'\x00' \
-                          + msg_len_b.to_bytes(1, 'little') + msg_b
+                          + msg_len.to_bytes(4, 'big') + msg_b
 
                     # Iterate over all users in room and send them the message (not to self though)
                     for room_user in room.room_users.values():
@@ -272,8 +271,8 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                 # Get the info based on offsets
                 recv_uname_len = the_rest[0]
                 recv_uname = the_rest[1:1+recv_uname_len].decode()
-                msg_len_b = the_rest[2+recv_uname_len] # There's a 0x00 in between
-                msg_b = the_rest[3+recv_uname_len:]
+                msg_len = int.from_bytes(the_rest[2+recv_uname_len:6+recv_uname_len], 'big') # There's a 0x00 in between
+                msg_b = the_rest[6+recv_uname_len:]
 
                 # Check if receiver user exists
                 recv_user = User.all_users.get(recv_uname, None)
@@ -284,7 +283,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                     # Send user the message, and send sender the confirm message
                     sender_name_b = user.name.encode()
                     data = len(sender_name_b).to_bytes(1, 'little') + sender_name_b + b'\x00' \
-                        + msg_len_b.to_bytes(1, 'little')+ msg_b
+                        + msg_len.to_bytes(4, 'big')+ msg_b
                     send_message(recv_user.sock, 0x12, data)
 
 

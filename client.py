@@ -77,15 +77,15 @@ def process_response(sock):
     if instr == 0x12:
         recv_uname_len = the_rest[0]
         recv_uname = the_rest[1:1+recv_uname_len].decode()
-        msg_len_b = the_rest[2+recv_uname_len] 
-        msg_b = the_rest[3+recv_uname_len:]
+        msg_len = int.from_bytes(the_rest[2+recv_uname_len:6+recv_uname_len], 'big') 
+        msg_b = the_rest[6+recv_uname_len:]
         print(f"< {recv_uname}: {msg_b.decode('utf-8')}")
 
     # Receive room message
     elif instr == 0x15:
-        uname_len = the_rest[2 + len(currroom):4+len(currroom)]
-        uname = the_rest[4+len(currroom):4+len(currroom)+uname_len]
-        msg_len = the_rest[4+len(currroom)+uname_len:8+len(currroom)+uname_len]
+        uname_len = the_rest[2 + len(currroom)]
+        uname = the_rest[3+len(currroom):4+len(currroom)+uname_len]
+        msg_len = int.from_bytes(the_rest[4+len(currroom)+uname_len:8+len(currroom)+uname_len], 'big')
         message = the_rest[8+len(currroom)+uname_len:]
         print(f"[{currroom}] < uname: {message}")
         
@@ -104,46 +104,46 @@ def process_response(sock):
         print("usernames:", ", ".join(usernames))
     # response from server list_rooms
     elif instr== 0x09:
-        data_len = data_len - 1
-        rname_beg_index = 1
+
+        data_len = len(the_rest)
+        rname_beg_index = 0
         roomnames = []
+
         while data_len > 0:
             recv_rname_len = the_rest[rname_beg_index]
-            rname = the_rest[rname_beg_index + 1 : rname_beg_index + recv_rname_len + 1]
-            roomnames.append(rname.decode('utf-8')) 
-            rname_beg_index = recv_rname_len + 2
-            data_len = data_len - recv_rname_len - 2
+            rname = the_rest[rname_beg_index + 1 : rname_beg_index + 1 + recv_rname_len]
+            roomnames.append(rname.decode('utf-8'))
+            rname_beg_index += recv_rname_len + 1
+            data_len -= recv_rname_len + 1
+
         print("Rooms:", ", ".join(roomnames))
 
+
     elif instr == 0x9b:
-        global my_name
         print(f"Connected. Username is {the_rest[1:].decode('utf-8')}")
         my_name = the_rest[1:].decode('utf-8')
+        print(my_name)
     
     # Username changed confirmation. Update username
     elif instr == 0x90:
-        global my_name
         uname_len = the_rest[0]
-        my_name = the_rest[1:uname_len].decode()
+        my_name = the_rest[1:uname_len+1].decode()
         print("Name changed to", my_name)
-
+        print(my_name)
     # Room join confirmation
     elif instr == 0x91:
-        global currroom
         rname_len = the_rest[0]
-        currroom = the_rest[1:rname_len].decode()
+        currroom = the_rest[1:rname_len + 1].decode()
         print("Joined room", currroom)
 
     # Room create confirmation
     elif instr == 0x93:
-        global currroom
         rname_len = the_rest[0]
-        currroom = the_rest[1:rname_len].decode()
+        currroom = the_rest[1:rname_len + 1].decode()
         print("Created and joined room", currroom)
 
     # Left room confirm
     elif instr == 0x92:
-        global currroom
         currroom = None
         print("Left room")
 
@@ -172,12 +172,12 @@ def request_user_list(sock):
     send_message(sock, 0x0c)
 
 def send_room_msg(sock, message):
-    send_message(sock, 0x15, len(currroom).to_bytes(2,'little') + currroom.encode() \
-                  + len(message).to_bytes(4, 'little'), message.encode('utf-8'))
+    send_message(sock, 0x15, len(currroom).to_bytes(1,'little') + currroom.encode()
+                 + len(message).to_bytes(4, 'big') + message.encode('utf-8'))
     print(f"[{currroom}] > {my_name}: {message}")
 
 def send_direct_message(sock, username, message):
-    data = len(username).to_bytes(1, 'little') + str(username).encode('utf-8') + b'\x00' + len(message).to_bytes(1, 'little') + str(message).encode('utf-8')
+    data = len(username).to_bytes(1, 'little') + str(username).encode('utf-8') + b'\x00' + len(message).to_bytes(4, 'big') + str(message).encode('utf-8')
     send_message(sock, 0x12, data)
     print(f"> {my_name}: {message}")
     
@@ -222,7 +222,6 @@ def main(server_host, server_port):
         # Loop over sockets and process them accordingly
         while True:
 
-    
             # Check the sockets, and iterate over events
             try:
                 events = sel.select(timeout=-1)

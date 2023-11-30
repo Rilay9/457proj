@@ -12,6 +12,12 @@ class Room:
         self.room_users = {user.name: user}
         self.name = room_name
         self.password = pword
+
+        # Removes user from old room
+        if user.room is not None:
+            old_room = Room.all_rooms[user.room]
+            old_room.remove(user)
+
         user.room = self.name
         Room.all_rooms[room_name] = self # Caller checks if name already exists
 

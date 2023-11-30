@@ -47,7 +47,7 @@ class User:
                 User.all_users[new_name] = self
             
             # Send confirmation message (data_len 04 17 9a no_err, if i understand right)
-            send_message(self.sock, 0x90, bytes(len(new_name)) + new_name.encode())
+            send_message(self.sock, 0x90, len(new_name).to_bytes(1, 'little') + new_name.encode())
 
         else:
             # If already exists, send error message
