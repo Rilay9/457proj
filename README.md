@@ -96,6 +96,13 @@ NEW MESSAGE TYPES (make into functions?):
 
 - File transmission messages (see end)
 
+More messages from server:
+0x9b - Connected. Gives username
+0x90 - Username changed confirm. Includes new username
+0x91 - Room join confirm. Includes room name
+0x93 - Room create confirm. Includes room name
+0x92 - Room leave confirm
+
 3.1: Basic Chat
     
     a)  High-Level: The application will consist of a central server program and the user client     

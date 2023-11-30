@@ -174,7 +174,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                 name_len_b = len(name_b).to_bytes(1, 'little')
                 data += name_len_b + name_b
 
-            send_message(sock, 0x9a, data)
+            send_message(sock, 0x09, data)
 
 
         # Room join request. Creates room if it doesn't exist, tries to join if it does.
@@ -186,8 +186,8 @@ def process_client_msg(key: selectors.SelectorKey, sel):
             # It seems that the last byte is 00 if there's no password
             room_name_len = the_rest[0]
             room_name = the_rest[1:1+room_name_len].decode()
-            password = "" if (the_rest[-1] == b'\x00') \
-                else the_rest[2+room_name_len:].decode()
+            password = "" if (room_name_len + 1 == len(the_rest)) \
+                else the_rest[1+room_name_len:].decode()
 
             # If already in room, send the appropriate error message
             if room_name == user.room:
@@ -200,7 +200,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
 
                     # Try to join room, send the appropriate message upon result
                     if room.join(user, password):
-                        send_message(sock, 0x9a, b'Joined room ' + room_name.encode())
+                        send_message(sock, 0x91, bytes(len(room_name)) + room_name.encode())
                     
                     else:
                         # Password must have failed, send error message
@@ -209,7 +209,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                 # If room doesn't exist, create it. (adds to static map of rooms)
                 else:
                     Room(user, room_name, password)  
-                    send_message(sock, 0x9a, b'Created and joined room ' + room_name.encode())
+                    send_message(sock, 0x93, bytes(len(room_name)) + room_name.encode())
 
         
         # Send message to room. If not in room, send 9a 01 error, otherwise send to users in room.
@@ -300,7 +300,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                 # Leave room
                 room = Room.all_rooms[user.room]
                 room.remove(user)
-                send_message(sock, 0x9a, 'Left room')
+                send_message(sock, 0x92, b'')
         
         else:
             print("Invalid header received", file=sys.stderr)         

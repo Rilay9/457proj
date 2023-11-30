@@ -12,6 +12,7 @@ HEADER_LEN = 7
 expected_response_queue = []
 
 currroom = None
+my_name = None
 
 def is_socket_closed(sock):
     try:
@@ -55,7 +56,8 @@ def recv_all(sock:socket, size) -> bytearray:
     return data
 
 def process_response(sock):
-    
+    global currroom
+    global my_name
     header = recv_all(sock, HEADER_LEN)
 
     # If there's no data, it must have closed the connection, so remove from everything
@@ -71,14 +73,24 @@ def process_response(sock):
     
     the_rest = recv_all(sock, data_len)
     print("the rest ", the_rest)
-        # response from server send_msg
+        # Receive direct message
     if instr == 0x12:
         recv_uname_len = the_rest[0]
         recv_uname = the_rest[1:1+recv_uname_len].decode()
         msg_len_b = the_rest[2+recv_uname_len] 
         msg_b = the_rest[3+recv_uname_len:]
-        print(recv_uname, "> ", msg_b.decode('utf-8'))
-        # response from server list_users
+        print(f"< {recv_uname}: {msg_b.decode('utf-8')}")
+
+    # Receive room message
+    elif instr == 0x15:
+        uname_len = the_rest[2 + len(currroom):4+len(currroom)]
+        uname = the_rest[4+len(currroom):4+len(currroom)+uname_len]
+        msg_len = the_rest[4+len(currroom)+uname_len:8+len(currroom)+uname_len]
+        message = the_rest[8+len(currroom)+uname_len:]
+        print(f"[{currroom}] < uname: {message}")
+        
+
+    # response from server list_users
     elif instr== 0x9c:
         data_len = data_len - 1
         uname_beg_index = 1
@@ -104,8 +116,37 @@ def process_response(sock):
         print("Rooms:", ", ".join(roomnames))
 
     elif instr == 0x9b:
+        global my_name
         print(f"Connected. Username is {the_rest[1:].decode('utf-8')}")
+        my_name = the_rest[1:].decode('utf-8')
     
+    # Username changed confirmation. Update username
+    elif instr == 0x90:
+        global my_name
+        uname_len = the_rest[0]
+        my_name = the_rest[1:uname_len].decode()
+        print("Name changed to", my_name)
+
+    # Room join confirmation
+    elif instr == 0x91:
+        global currroom
+        rname_len = the_rest[0]
+        currroom = the_rest[1:rname_len].decode()
+        print("Joined room", currroom)
+
+    # Room create confirmation
+    elif instr == 0x93:
+        global currroom
+        rname_len = the_rest[0]
+        currroom = the_rest[1:rname_len].decode()
+        print("Created and joined room", currroom)
+
+    # Left room confirm
+    elif instr == 0x92:
+        global currroom
+        currroom = None
+        print("Left room")
+
     # Catchall for various info from server
     elif instr == 0x9a:
         print(the_rest.decode())
@@ -130,10 +171,15 @@ def request_user_list(sock):
     print("requested_user_list")
     send_message(sock, 0x0c)
 
+def send_room_msg(sock, message):
+    send_message(sock, 0x15, len(currroom).to_bytes(2,'little') + currroom.encode() \
+                  + len(message).to_bytes(4, 'little'), message.encode('utf-8'))
+    print(f"[{currroom}] > {my_name}: {message}")
+
 def send_direct_message(sock, username, message):
     data = len(username).to_bytes(1, 'little') + str(username).encode('utf-8') + b'\x00' + len(message).to_bytes(1, 'little') + str(message).encode('utf-8')
     send_message(sock, 0x12, data)
-    print(f"> {message}")
+    print(f"> {my_name}: {message}")
     
 def join_room(sock, username, password):
     if len(password) > 0:
@@ -206,7 +252,10 @@ def main(server_host, server_port):
                     command = input()
                     if command == 'nick':
                         new_nickname = input("Enter new nickname: ")
-                        change_nickname(sock, new_nickname)
+                        if len(new_nickname) > 255:
+                            print("Nickname too large.")
+                        else:
+                            change_nickname(sock, new_nickname)
                     elif command == 'list_users':
                         request_user_list(sock)
                     elif command == 'list_rooms':
@@ -219,6 +268,9 @@ def main(server_host, server_port):
                         room_name = input("Enter room name: ")
                         password = input("Enter room password: ")
                         join_room(sock, room_name, password)
+                    elif command == 'msg_room':
+                        message = input("Enter message: ")
+                        send_room_msg(sock, message)
                     elif command == 'file_xfer':
                         username = input("Enter username to send file to: ")
                         file_path = input("Enter file path: ")
@@ -229,7 +281,7 @@ def main(server_host, server_port):
                         print("Exiting client.")
                         sock_close_exit(sock, 0)
                     else:
-                        print("usage: nick, list_users, send_msg, join_room, file_xfer, leave, quit")
+                        print("usage: nick, list_users, list_rooms, send_msg,\nmsg_room join_room, file_xfer, leave, quit")
                     
 
 if __name__ == "__main__":
