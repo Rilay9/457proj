@@ -94,6 +94,10 @@ NEW MESSAGE TYPES (make into functions?):
     RSA public key (for integrity checking). This function is called in client send_direct_message function if 
     the client doesn't have an AES key for the target user yet.
 
+
+- DM Request Response message (ID:0x89)
+    Sends back a message: targetuname_len + targetuname + public_key_len + public_key + aes_key
+    (AES key is 16 bytes)
 - File transmission messages (see end)
 
 More messages from server:

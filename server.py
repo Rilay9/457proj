@@ -214,7 +214,6 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                     Room(user, room_name, password)  
                     send_message(sock, 0x93, bytes([len(room_name)]) + room_name.encode())
 
-        
         # Send message to room. If not in room, send 9a 01 error, otherwise send to users in room.
         # Seems can't request >= 5 messages in < 5 seconds (DM or room, and even if error) 
         elif instr == 0x15:
@@ -288,6 +287,29 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                     send_message(recv_user.sock, 0x12, data)
 
 
+        # If gets DM Request message
+        elif instr == 0x89:
+            aeskey = generate_aes_key()
+
+            recv_uname_len = the_rest[0]
+            recv_uname = the_rest[1:1+recv_uname_len].decode()
+
+            # If user doesn't exists send, user doesn't exist message
+            if recv_uname not in User.all_users.keys():
+                send_message(user.sock, 0x94, the_rest[0:1+recv_uname_len])
+            
+            else:
+                
+                pubkey1 = User.all_users[recv_uname].rsa_pub.export_key()
+                data1 = the_rest[0:1+recv_uname_len] + len(pubkey1).to_bytes(3, 'little') + \
+                    pubkey1 + aeskey
+                pubkey2 = user.rsa_pub.export_key()
+                data2 = len(user.name) + user.name.encode() + len(pubkey2).to_bytes(3, 'little') + \
+                    pubkey2 + aeskey
+
+                send_message(user.sock, 0x89, data1)
+                send_message(User.all_users[recv_uname].sock, 0x89, data2)
+                
         # Leave. Data len is 0, so no more to be received.
         # Close user if not in room, leave room if in one
         elif instr == 0x06:
