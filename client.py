@@ -168,6 +168,9 @@ def request_user_list(sock):
     send_message(sock, 0x0c)
 
 def send_room_msg(sock, message):
+    if currroom is None:
+        print("Not currently in a room foo'")
+        return
     send_message(sock, 0x15, len(currroom).to_bytes(1,'little') + currroom.encode()
                  + len(message).to_bytes(4, 'big') + message.encode('utf-8'))
     print(f"[{currroom}] > {my_name}: {message}")
