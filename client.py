@@ -72,7 +72,7 @@ def process_response(sock):
         instr = header[6]
     
     the_rest = recv_all(sock, data_len)
-    print("the rest ", the_rest)
+
         # Receive direct message
     if instr == 0x12:
         recv_uname_len = the_rest[0]
@@ -122,14 +122,14 @@ def process_response(sock):
     elif instr == 0x9b:
         print(f"Connected. Username is {the_rest[1:].decode('utf-8')}")
         my_name = the_rest[1:].decode('utf-8')
-        print(my_name)
+
     
     # Username changed confirmation. Update username
     elif instr == 0x90:
         uname_len = the_rest[0]
         my_name = the_rest[1:uname_len+1].decode()
         print("Name changed to", my_name)
-        print(my_name)
+
     # Room join confirmation
     elif instr == 0x91:
         rname_len = the_rest[0]
@@ -153,13 +153,9 @@ def process_response(sock):
 
 
 def send_message(sock, instruction, data=b''):
-    if instruction != 0x13:
-        print("length of data being sent", len(data))
     header = (len(data)).to_bytes(4, 'big') + b'\x04\x00'  # data_len, 0x04179a00
     message = header + bytes([instruction]) + data
     b = sock.sendall(message)
-    if instruction != 0x13:
-        print("bytes sent", b)
 
 def change_nickname(sock, new_nickname):
     send_message(sock, 0x0f, len(new_nickname).to_bytes(1,'little') + new_nickname.encode('utf-8'))
