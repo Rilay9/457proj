@@ -2,6 +2,13 @@
 # and a password.
 
 from user import User
+from Cryptostuff import *
+
+
+def send_message(sock, instruction, data=b''):
+    header = (len(data)).to_bytes(4, 'big') + b'\x04\x17'  # data_len, 0x04179a00
+    message = header + bytes([instruction]) + data
+    b = sock.sendall(message)
 
 class Room:
 
@@ -11,7 +18,8 @@ class Room:
     def __init__(self, user:User, room_name:str, pword:str) -> None:
         self.room_users = {user.name: user}
         self.name = room_name
-        self.password = pword
+        self.password = hash(pword)
+        self.aes_key = generate_aes_key()
 
         # Removes user from old room
         if user.room is not None:
@@ -20,12 +28,15 @@ class Room:
 
         user.room = self.name
         Room.all_rooms[room_name] = self # Caller checks if name already exists
+        
+        # Send AES key encrypted with user's public key
+        send_message(user.sock, 0x84, encrypt_with_rsa(self.aes_key, user.rsa_pub))
 
     # Join the room. Returns true if password was correct and user
     # was added, and false otherwise
     def join(self, user:User, pword:str) -> bool:
         
-        if pword == self.password:
+        if hash(pword) == self.password:
 
             # Add user to room users
             self.room_users[user.name] = user
@@ -37,6 +48,21 @@ class Room:
             
             # Updates user's room
             user.join_room(self.name)
+
+            # Send AES key encrypted with user's public key
+            send_message(user.sock, 0x84, encrypt_with_rsa(self.aes_key, user.rsa_pub))
+            
+            for roommate in self.room_users.values():
+                
+                if roommate is not user:
+                    # Send all the room's users public keys to the new user
+                    key = roommate.rsa_pub.export_key()
+                    send_message(user.sock, 0x81, len(roommate.name) + roommate.name.encode() + key)
+
+                    # Send the new user's public key to all the room's users
+                    key = user.rsa_pub.export_key()
+                    send_message(roommate.sock, 0x81, len(user.name) + user.name.encode() + key)
+
             return True
         else:
             return False

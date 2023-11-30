@@ -3,7 +3,7 @@
 
 import socket
 import time
-
+from Cryptostuff import *
 
 def send_message(sock, instruction, data=b''):
     header = (len(data)).to_bytes(4, 'big') + b'\x04\x17'  # data_len, 0x04179a00
@@ -15,11 +15,11 @@ class User:
     all_users = {}
     
     # Create the user.
-    def __init__(self, sock: socket) -> None:
+    def __init__(self, sock: socket, rsapub) -> None:
         self.sock:socket = sock
         self.room = None
         self.time_last_updated = time.time()
-        
+        self.rsa_pub = rsapub
         # Holds the last 4 times a message was sent in order to send error if 
         # sending too much. Should only be 4 or less, as it serves as a sliding window
         self.last_message_times = [] 

@@ -22,7 +22,7 @@
             "name": "Python: Client",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/client.py",
+            "program": "${workspaceFolder}/Client.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [

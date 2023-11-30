@@ -6,6 +6,7 @@ import sys
 import argparse
 import selectors
 
+from Cryptostuff import *
 from user import User
 from room import Room
 
@@ -62,17 +63,20 @@ def accept_new(sock, sel: selectors.DefaultSelector):
         return
     
     # Receive the client connect message. Assumes always the correct 21 bytes (for now)
-    if (recv_all(conn, 21)) is None:
+    header = recv_all(conn, HEADER_LEN)
+    if header is None:
         conn.close()
         print("Error on server accept connection", file=sys.stderr)
         return
-    
+
     # If worked, create and add the new user to the server list, and add the socket to
     # selector. Oh and send response
     else:
         # Create user. The "constructor" adds it to the static variable containing
         # all users. Went with a static one cos i was getting confused by dependencies
-        new_user = User(conn) 
+        len = int.from_bytes(header[0:4], 'big')
+        key = RSA.import_key(recv_all(conn, len))
+        new_user = User(conn, key) 
 
         # Construct response components
         header_b = b'\x04\x17\x9b'
@@ -290,7 +294,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
             if user.room is None:
                 # Close user
                 sel.unregister(sock)
-                send_message(sock, 0x9a, 'Left server')
+                send_message(sock, 0x9a, b'Left server')
                 close_user(user)
             else:
                 # Leave room
