@@ -240,7 +240,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                     username_b = user.name.encode()
                     username_len_b = len(username_b).to_bytes(1, 'little')
                     msg_len = int.from_bytes(the_rest[1+room_name_len_b:5+room_name_len_b], 'big')
-                    msg_b = the_rest[5+room_name_len:]
+                    msg_b = the_rest[5+room_name_len_b:]
 
                     # Put it all together (again, len(data) is set to big-endian to pad zeros)
                     data = room_name_len_b.to_bytes(1, 'little') + room_name_b \
@@ -250,10 +250,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                     # Iterate over all users in room and send them the message (not to self though)
                     for room_user in room.room_users.values():
                         if room_user.name != user.name:
-                            send_message(room_user.sock, 0x15, data)
-
-                    # Send confirmation to og user
-                    server_confirm(sock)  
+                            send_message(room_user.sock, 0x15, data)  
 
         
         # Direct message request. Similar to room message. Has same time limit for 5 msgs.

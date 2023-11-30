@@ -197,9 +197,8 @@ def file_xfer(username, file_path):
 def leave_room_or_server(sock):
     send_message(sock, 0x06)
 
-def heartbeat(sock, interval=5):
+def heartbeat(sock, interval=25):
     send_message(sock, 0x13)
-    threading.Timer(interval, heartbeat, [sock, interval]).start()
 
 
 def main(server_host, server_port):
@@ -211,7 +210,7 @@ def main(server_host, server_port):
             print(f"Error connecting to server: {e}")
             sys.exit(1)
 
-        heartbeat_thread = threading.Timer(5, heartbeat, [sock])
+        heartbeat_thread = threading.Timer(25, heartbeat, [sock])
         heartbeat_thread.start()
 
         # Create poll(, select, or whatever's best) object
