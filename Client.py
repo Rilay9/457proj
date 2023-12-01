@@ -93,7 +93,7 @@ class ChatClient:
         
         the_rest = self.recv_all(sock, data_len)
 
-        if the_rest is not None and instr != 0x9b and instr != 0x81:
+        if the_rest is not None and the_rest != b'' and instr != 0x9b and instr != 0x81:
             the_rest = aes_basic_decrypt(the_rest, self.server_aes_key)
 
         # Receive direct message
@@ -104,7 +104,7 @@ class ChatClient:
             msg_b = the_rest[6+recv_uname_len:]
             try:
                 msg = decrypt_overall_with_iv(msg_b, self.public_key_dict[target_uname], self.aes_key_dict[target_uname])
-                print(f"< {target_uname}: {msg_b.decode('utf-8')}")
+                print(f"< {target_uname}: {msg.decode('utf-8')}")
             except:
                 print("Message decryption failed. Possible tampering.")
         # Receive room message
@@ -268,7 +268,7 @@ class ChatClient:
             data = len(username).to_bytes(1, 'little') + str(username).encode('utf-8') \
                 + b'\x00' + len(encrypted_msg).to_bytes(4, 'big') + encrypted_msg
             
-            self.send_message(sock, 0x12, data, False)
+            self.send_message(sock, 0x12, data)
             print(f"> {self.my_name}: {message}")
         
     def join_room(self, sock, username, password):
