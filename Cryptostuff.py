@@ -5,6 +5,19 @@ from Crypto.Signature import pkcs1_15
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
 
+# Compare two hash objects, or one digest and one hash object
+def compare_hashes(hash1, hash2):
+    """
+    Compare two hash values.
+    - hash1 and hash2 can be either SHA256Hash objects or byte strings (digests).
+    - Returns True if the hashes are the same, False otherwise.
+    """
+    digest1 = hash1.digest() if isinstance(hash1, SHA256.SHA256Hash) else hash1
+    digest2 = hash2.digest() if isinstance(hash2, SHA256.SHA256Hash) else hash2
+
+    return digest1 == digest2
+
+
 # Function to generate an RSA key pair
 def generate_rsa_keys():
     key = RSA.generate(2048)

@@ -218,7 +218,10 @@ class ChatClient:
         b = sock.sendall(message)
 
     def change_nickname(self, sock, new_nickname):
-        self.send_message(sock, 0x0f, len(new_nickname).to_bytes(1,'little') + new_nickname.encode('utf-8'))
+        if self.currroom is None:
+            print("Please, please just leave the room before changing name.")
+        else:    
+            self.send_message(sock, 0x0f, len(new_nickname).to_bytes(1,'little') + new_nickname.encode('utf-8'))
 
     def request_room_list(self, sock):
         self.send_message(sock, 0x09)

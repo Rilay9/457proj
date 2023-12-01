@@ -36,7 +36,7 @@ class Room:
     # was added, and false otherwise
     def join(self, user:User, pword:str) -> bool:
         
-        if hash(pword) == self.password:
+        if compare_hashes(hash(pword), self.password):
 
             # Add user to room users
             self.room_users[user.name] = user

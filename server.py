@@ -301,12 +301,15 @@ def process_client_msg(key: selectors.SelectorKey, sel):
             
             else:
                 
+                # Send target public key and aes key encrypted with user key to user
                 pubkey1 = User.all_users[recv_uname].rsa_pub.export_key()
-                encaes1 = encrypt_with_rsa(aeskey, User.all_users[recv_uname].rsa_pub)
+                encaes1 = encrypt_with_rsa(aeskey, user.rsa_pub)
                 data1 = the_rest[0:1+recv_uname_len] + len(pubkey1).to_bytes(3, 'little') + \
                     pubkey1 + encaes1
+                
+                # Send user public key and aes key encrypted with target key to target
                 pubkey2 = user.rsa_pub.export_key()
-                encaes2 = encrypt_with_rsa(aeskey, user.rsa_pub)
+                encaes2 = encrypt_with_rsa(aeskey, User.all_users[recv_uname].rsa_pub)
                 data2 = len(user.name).to_bytes(1, 'little') + user.name.encode() + len(pubkey2).to_bytes(3, 'little') + \
                     pubkey2 + encaes2
 
