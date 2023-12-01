@@ -114,7 +114,7 @@ class ChatClient:
             msg_len = int.from_bytes(the_rest[3+len(self.currroom)+uname_len:7+len(self.currroom)+uname_len], 'big')
             msg_b = the_rest[7+len(self.currroom)+uname_len:]
             try:
-                msg = decrypt_overall_with_iv(msg_b, self.public_key_dict[target_uname], self.aes_key_dict[target_uname])
+                msg = decrypt_overall_with_iv(msg_b, self.public_key_dict[target_uname], self.room_aes_key)
                 print(f"[{self.currroom}] < {target_uname}: {msg.decode()}")
             except:
                 print("Message decryption failed. Possible tampering.")
