@@ -124,16 +124,14 @@ class ChatClient:
 
         # response from server list_users
         elif instr== 0x9c:
-            data_len = data_len - 1
-            uname_beg_index = 1
+            uname_beg_index = 0
             usernames = []
-            while data_len > 0:
+            while uname_beg_index < len(the_rest):
                 recv_uname_len = the_rest[uname_beg_index]
                 uname = the_rest[uname_beg_index + 1 : uname_beg_index + recv_uname_len + 1]
-                usernames.append(uname.decode('utf-8')) 
-                uname_beg_index = recv_uname_len + 2
-                data_len = data_len - recv_uname_len - 2
-            print("usernames:", ", ".join(usernames))
+                usernames.append(uname.decode('utf-8'))
+                uname_beg_index += recv_uname_len + 1
+            print("Usernames:", ", ".join(usernames))
         # response from server list_rooms
         elif instr== 0x09:
 
@@ -210,7 +208,7 @@ class ChatClient:
             target_uname = the_rest[1:target_uname_len+1].decode()
             pub_key_len = int.from_bytes(the_rest[target_uname_len+1:target_uname_len+4], 'little')
             self.public_key_dict[target_uname] =  RSA.import_key(the_rest[target_uname_len+4:target_uname_len+4+pub_key_len])
-            self.aes_key_dict[target_uname] = decrypt_with_rsa(the_rest[target_uname_len+4+pub_key_len:], self.rsa_priv)
+            self.aes_key_dict[target_uname] = the_rest[target_uname_len+4+pub_key_len:]
 
         # Catchall for various info from server
         elif instr == 0x9a:
@@ -253,7 +251,7 @@ class ChatClient:
         if self.currroom is None:
             print("Not currently in a room foo'")
             return
-        encrypted_msg = encrypt_overall_with_iv(message, self.rsa_priv, self.room_aes_key)
+        encrypted_msg = encrypt_overall_with_iv(message.encode(), self.rsa_priv, self.room_aes_key)
         data = len(self.currroom).to_bytes(1,'little') + self.currroom.encode() \
                     + len(encrypted_msg).to_bytes(4, 'big') + encrypted_msg
         
@@ -266,7 +264,7 @@ class ChatClient:
             self.send_message(sock, 0x82, len(username).to_bytes(1,'little') + username.encode())
             self.register_callback(0x89, username, self.send_direct_message, sock, username, message)
         else:
-            encrypted_msg = encrypt_overall_with_iv(message, self.rsa_priv, self.aes_key_dict[username])
+            encrypted_msg = encrypt_overall_with_iv(message.encode(), self.rsa_priv, self.aes_key_dict[username])
             data = len(username).to_bytes(1, 'little') + str(username).encode('utf-8') \
                 + b'\x00' + len(encrypted_msg).to_bytes(4, 'big') + encrypted_msg
             
