@@ -106,6 +106,7 @@ More messages from server:
 0x91 - Room join confirm. Includes room name
 0x93 - Room create confirm. Includes room name
 0x92 - Room leave confirm
+0x94 - User doesn't exist for DM
 
 3.1: Basic Chat
     

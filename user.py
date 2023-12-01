@@ -62,7 +62,7 @@ class User:
         old_time = self.time_last_updated
         self.time_last_updated = time.time()
 
-        if self.time_last_updated - old_time >= 20:
+        if self.time_last_updated - old_time >= 25:
             
             # Just realized I could paste the correct bytes to send in their entirety
             # I understand the message

@@ -57,11 +57,11 @@ class Room:
                 if roommate is not user:
                     # Send all the room's users public keys to the new user
                     key = roommate.rsa_pub.export_key()
-                    send_message(user.sock, 0x81, len(roommate.name) + roommate.name.encode() + key)
+                    send_message(user.sock, 0x81, len(roommate.name).to_bytes(1, 'little') + roommate.name.encode() + key)
 
                     # Send the new user's public key to all the room's users
                     key = user.rsa_pub.export_key()
-                    send_message(roommate.sock, 0x81, len(user.name) + user.name.encode() + key)
+                    send_message(roommate.sock, 0x81, len(user.name).to_bytes(1, 'little') + user.name.encode() + key)
 
             return True
         else:

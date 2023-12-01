@@ -74,8 +74,8 @@ def accept_new(sock, sel: selectors.DefaultSelector):
     else:
         # Create user. The "constructor" adds it to the static variable containing
         # all users. Went with a static one cos i was getting confused by dependencies
-        len = int.from_bytes(header[0:4], 'big')
-        key = RSA.import_key(recv_all(conn, len))
+        length = int.from_bytes(header[0:4], 'big')
+        key = RSA.import_key(recv_all(conn, length))
         new_user = User(conn, key) 
 
         # Construct response components
@@ -288,7 +288,8 @@ def process_client_msg(key: selectors.SelectorKey, sel):
 
 
         # If gets DM Request message
-        elif instr == 0x89:
+        elif instr == 0x82:
+            the_rest = recv_all(sock, data_len)
             aeskey = generate_aes_key()
 
             recv_uname_len = the_rest[0]
@@ -301,15 +302,17 @@ def process_client_msg(key: selectors.SelectorKey, sel):
             else:
                 
                 pubkey1 = User.all_users[recv_uname].rsa_pub.export_key()
+                encaes1 = encrypt_with_rsa(aeskey, User.all_users[recv_uname].rsa_pub)
                 data1 = the_rest[0:1+recv_uname_len] + len(pubkey1).to_bytes(3, 'little') + \
-                    pubkey1 + aeskey
+                    pubkey1 + encaes1
                 pubkey2 = user.rsa_pub.export_key()
-                data2 = len(user.name) + user.name.encode() + len(pubkey2).to_bytes(3, 'little') + \
-                    pubkey2 + aeskey
+                encaes2 = encrypt_with_rsa(aeskey, user.rsa_pub)
+                data2 = len(user.name).to_bytes(1, 'little') + user.name.encode() + len(pubkey2).to_bytes(3, 'little') + \
+                    pubkey2 + encaes2
 
                 send_message(user.sock, 0x89, data1)
                 send_message(User.all_users[recv_uname].sock, 0x89, data2)
-                
+
         # Leave. Data len is 0, so no more to be received.
         # Close user if not in room, leave room if in one
         elif instr == 0x06:

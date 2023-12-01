@@ -194,8 +194,8 @@ class ChatClient:
             target_uname_len = the_rest[0]
             target_uname = the_rest[1:target_uname_len+1].decode()
             pub_key_len = int.from_bytes(the_rest[target_uname_len+1:target_uname_len+4], 'little')
-            self.public_key_dict[target_uname] =  RSA.import_key(the_rest[target_uname_len+4:target_uname_len+5+pub_key_len])
-            self.aes_key_dict[target_uname] = the_rest[target_uname_len+5+pub_key_len:]
+            self.public_key_dict[target_uname] =  RSA.import_key(the_rest[target_uname_len+4:target_uname_len+4+pub_key_len])
+            self.aes_key_dict[target_uname] = decrypt_with_rsa(the_rest[target_uname_len+4+pub_key_len:], self.rsa_priv)
 
         # Catchall for various info from server
         elif instr == 0x9a:
@@ -241,8 +241,8 @@ class ChatClient:
             + b'\x00' + len(message).to_bytes(4, 'big') + str(message).encode('utf-8')
         
         if username not in self.aes_key_dict.keys():
-            self.send_message(sock, 0x82, len(username) + username.encode())
-            self.register_callback(0x89, username, self.send_message, (sock, 0x12, data))
+            self.send_message(sock, 0x82, len(username).to_bytes(1,'little') + username.encode())
+            self.register_callback(0x89, username, self.send_message, sock, 0x12, data)
         else:
             self.send_message(sock, 0x12, data)
         
@@ -330,7 +330,6 @@ class ChatClient:
                     else:
                         print("usage: nick, list_users, list_rooms, send_msg,\nmsg_room join_room, file_xfer, leave, quit")
 
-                    return ret
     def run(self):
 
         self.rsa_priv, self.rsa_pub = generate_rsa_keys()
@@ -344,8 +343,8 @@ class ChatClient:
                 print(f"Error connecting to server: {e}")
                 sys.exit(1)
 
-            self.heartbeat_thread = threading.Timer(25, self.heartbeat, [sock])
-            self.heartbeat_thread.start()
+            # self.heartbeat_thread = threading.Timer(25, self.heartbeat, [sock])
+            # self.heartbeat_thread.start()
 
             # Create poll(, select, or whatever's best) object
             self.sel = selectors.DefaultSelector()
