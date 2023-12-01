@@ -5,8 +5,12 @@ from user import User
 from Cryptostuff import *
 
 
-def send_message(sock, instruction, data=b''):
+def send_message(sock, instruction, target:User, data=b''):
+    if (data != b'' and instruction != 0x81):
+        data = aes_basic_encrypt(data, target.server_aes_key)    
+    
     header = (len(data)).to_bytes(4, 'big') + b'\x04\x17'  # data_len, 0x04179a00
+
     message = header + bytes([instruction]) + data
     b = sock.sendall(message)
 
@@ -29,8 +33,8 @@ class Room:
         user.room = self.name
         Room.all_rooms[room_name] = self # Caller checks if name already exists
         
-        # Send AES key encrypted with user's public key
-        send_message(user.sock, 0x84, encrypt_with_rsa(self.aes_key, user.rsa_pub))
+        # Send AES key
+        send_message(user.sock, 0x84, user, self.aes_key)
 
     # Join the room. Returns true if password was correct and user
     # was added, and false otherwise
@@ -50,18 +54,18 @@ class Room:
             user.join_room(self.name)
 
             # Send AES key encrypted with user's public key
-            send_message(user.sock, 0x84, encrypt_with_rsa(self.aes_key, user.rsa_pub))
+            send_message(user.sock, 0x84, user, self.aes_key)
             
             for roommate in self.room_users.values():
                 
                 if roommate is not user:
                     # Send all the room's users public keys to the new user
                     key = roommate.rsa_pub.export_key()
-                    send_message(user.sock, 0x81, len(roommate.name).to_bytes(1, 'little') + roommate.name.encode() + key)
+                    send_message(user.sock, 0x81, roommate, len(roommate.name).to_bytes(1, 'little') + roommate.name.encode() + key)
 
                     # Send the new user's public key to all the room's users
                     key = user.rsa_pub.export_key()
-                    send_message(roommate.sock, 0x81, len(user.name).to_bytes(1, 'little') + user.name.encode() + key)
+                    send_message(roommate.sock, 0x81, user, len(user.name).to_bytes(1, 'little') + user.name.encode() + key)
 
             return True
         else:

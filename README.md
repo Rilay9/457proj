@@ -213,8 +213,11 @@ Target clients:
 
 
 
-Weaknesses (maybe to discuss?):
+Notes:
 Slow, as proof of concept in python
 Demand that you be out of room to change name (didn't use ids for dicts)
-If not dm, file transfer, or room msg, only encrypted with AES, no integrity checks or anything (we actually encrypt twice for the dm, file transfer, and room_msg)
-(time)
+If not dm, file transfer, or room msg, only encrypted with AES, no integrity checks or anything for client to server admin messages. serveer doesn't encrypt non-sensitive admin messages back. Heartbeat isn't encrypted.
+Btw, in order to read usernames but not have them obvious, encrypted msg again
+with servers AES for dm and room msg
+Empty message error checks? msg length is probably limited
+Couldn't encrypt the RSA public keys with AES, which is fine, but just the implementation had to be tweaked

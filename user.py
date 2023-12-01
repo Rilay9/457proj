@@ -5,10 +5,6 @@ import socket
 import time
 from Cryptostuff import *
 
-def send_message(sock, instruction, data=b''):
-    header = (len(data)).to_bytes(4, 'big') + b'\x04\x17'  # data_len, 0x04179a00
-    message = header + bytes([instruction]) + data
-    b = sock.sendall(message)
 
 class User:
     
@@ -36,6 +32,15 @@ class User:
         # Add to dict of users
         User.all_users[self.name] = self
 
+    def send_message(self, sock, instruction, data=b''):
+        if (data != b''):
+            data = aes_basic_encrypt(data, self.server_aes_key)
+
+        header = (len(data)).to_bytes(4, 'big') + b'\x04\x17'  # data_len, 0x04179a00
+
+        message = header + bytes([instruction]) + data
+        b = sock.sendall(message)
+
     # Change the nickname. If same name, or if doesn't exist already, update and send
     # confirmation message. Otherwise, send error message 
     def change_name(self, new_name) -> None:
@@ -47,13 +52,13 @@ class User:
                 User.all_users[new_name] = self
             
             # Send confirmation message (data_len 04 17 9a no_err, if i understand right)
-            send_message(self.sock, 0x90, len(new_name).to_bytes(1, 'little') + new_name.encode())
+            self.send_message(self.sock, 0x90, len(new_name).to_bytes(1, 'little') + new_name.encode())
 
         else:
             # If already exists, send error message
             # (data_len 04 17 9a err_1 special set of skills msg).
             # Again, fixed length message, so just copied from wireshark as c array
-            send_message(self.sock, 0x9a, b'Name already exists.')
+            self.send_message(self.sock, 0x9a, b'Name already exists.')
             
     # Update time. Sends "He's still alive but in a very deep sleep message" if 
     # it's been 20 seconds since last update
@@ -66,7 +71,7 @@ class User:
             
             # Just realized I could paste the correct bytes to send in their entirety
             # I understand the message
-            send_message(self.sock, 0x9a, b'Careful, server times out client after 30 seconds of inactivity.')
+            self.send_message(self.sock, 0x9a, b'Careful, server times out client after 30 seconds of inactivity.')
 
     
     # Leaves room. Called from room remove() function, which is called only

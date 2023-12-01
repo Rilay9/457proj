@@ -75,7 +75,7 @@ class ChatClient:
         
         return data
 
-    def process_response(self, sock, check_for_messagetypes: List =[], check_for_uname = ""):
+    def process_response(self, sock):
 
         header = self.recv_all(sock, HEADER_LEN)
         target_uname = ""
@@ -93,21 +93,33 @@ class ChatClient:
         
         the_rest = self.recv_all(sock, data_len)
 
-            # Receive direct message
+        if the_rest is not None and instr != 0x9b and instr != 0x81:
+            the_rest = aes_basic_decrypt(the_rest, self.server_aes_key)
+
+        # Receive direct message
         if instr == 0x12:
             recv_uname_len = the_rest[0]
             target_uname = the_rest[1:1+recv_uname_len].decode()
             msg_len = int.from_bytes(the_rest[2+recv_uname_len:6+recv_uname_len], 'big') 
             msg_b = the_rest[6+recv_uname_len:]
-            print(f"< {target_uname}: {msg_b.decode('utf-8')}")
-
+            try:
+                msg = decrypt_overall_with_iv(msg_b, self.public_key_dict[target_uname], self.aes_key_dict[target_uname])
+                print(f"< {target_uname}: {msg_b.decode('utf-8')}")
+            except:
+                print("Message decryption failed. Possible tampering.")
         # Receive room message
         elif instr == 0x15:
             uname_len = the_rest[1 + len(self.currroom)]
             target_uname = the_rest[2+len(self.currroom):2+len(self.currroom)+uname_len].decode()
             msg_len = int.from_bytes(the_rest[3+len(self.currroom)+uname_len:7+len(self.currroom)+uname_len], 'big')
-            message = the_rest[7+len(self.currroom)+uname_len:]
-            print(f"[{self.currroom}] < {target_uname}: {message}")
+            msg_b = the_rest[7+len(self.currroom)+uname_len:]
+            try:
+                msg = decrypt_overall_with_iv(msg_b, self.public_key_dict[target_uname], self.aes_key_dict[target_uname])
+                print(f"[{self.currroom}] < {target_uname}: {msg.decode()}")
+            except:
+                print("Message decryption failed. Possible tampering.")
+            
+            
             
 
         # response from server list_users
@@ -184,13 +196,13 @@ class ChatClient:
 
         # AES room key received
         elif instr == 0x84:
-            self.room_aes_key = decrypt_with_rsa(the_rest, self.rsa_priv)
+            self.room_aes_key = the_rest
 
         # AES DM key received
         elif instr == 0x80:
             uname_len = the_rest[0]
             target_uname = the_rest[1:uname_len + 1].decode()
-            self.aes_key_dict[target_uname] = decrypt_with_rsa(the_rest[uname_len+3:], self.rsa_priv)
+            self.aes_key_dict[target_uname] = the_rest[uname_len+3:]
            
         # DM Request Response Message
         elif instr == 0x89:
@@ -215,10 +227,12 @@ class ChatClient:
             del self.callbacks[callback_key]  # Remove the callback after calling it
 
 
-    def send_message(self, sock, instruction, data=b''):
+    def send_message(self, sock, instruction, data=b'', encrypt=True):
+        if self.server_aes_key is not None and data != b'' and encrypt:
+            data = aes_basic_encrypt(data, self.server_aes_key)
+
         header = (len(data)).to_bytes(4, 'big') + b'\x04\x00'  # data_len, 0x04179a00
-        if self.server_aes_key is not None and data != b'':
-            data = aes_basic_encrypt(data)
+
         message = header + bytes([instruction]) + data
         b = sock.sendall(message)
 
@@ -239,22 +253,25 @@ class ChatClient:
         if self.currroom is None:
             print("Not currently in a room foo'")
             return
-
-        self.send_message(sock, 0x15, len(self.currroom).to_bytes(1,'little') + self.currroom.encode()
-                    + len(message).to_bytes(4, 'big') + message.encode('utf-8'))
+        encrypted_msg = encrypt_overall_with_iv(message, self.rsa_priv, self.room_aes_key)
+        data = len(self.currroom).to_bytes(1,'little') + self.currroom.encode() \
+                    + len(encrypted_msg).to_bytes(4, 'big') + encrypted_msg
+        
+        self.send_message(sock, 0x15, data)
         print(f"[{self.currroom}] > {self.my_name}: {message}")
 
     def send_direct_message(self, sock, username, message):
-        data = len(username).to_bytes(1, 'little') + str(username).encode('utf-8') \
-            + b'\x00' + len(message).to_bytes(4, 'big') + str(message).encode('utf-8')
         
         if username not in self.aes_key_dict.keys():
             self.send_message(sock, 0x82, len(username).to_bytes(1,'little') + username.encode())
-            self.register_callback(0x89, username, self.send_message, sock, 0x12, data)
+            self.register_callback(0x89, username, self.send_direct_message, sock, username, message)
         else:
-            self.send_message(sock, 0x12, data)
-        
-        print(f"> {self.my_name}: {message}")
+            encrypted_msg = encrypt_overall_with_iv(message, self.rsa_priv, self.aes_key_dict[username])
+            data = len(username).to_bytes(1, 'little') + str(username).encode('utf-8') \
+                + b'\x00' + len(encrypted_msg).to_bytes(4, 'big') + encrypted_msg
+            
+            self.send_message(sock, 0x12, data, False)
+            print(f"> {self.my_name}: {message}")
         
     def join_room(self, sock, username, password):
         if len(password) > 0:
@@ -273,7 +290,7 @@ class ChatClient:
         self.send_message(sock, 0x06)
 
     def heartbeat(self, sock, interval=25):
-        self.send_message(sock, 0x13)
+        self.send_message(sock, 0x13, False)
 
     def check_for_messages(self, sock, sel, check_for_messagetypes=[], check_for_uname = ""):
         #  Loop over sockets and process them accordingly
@@ -298,7 +315,7 @@ class ChatClient:
                         self.sock_close_exit(sock)
                     
                     try:
-                        ret = self.process_response(sock, check_for_messagetypes, check_for_uname)
+                        ret = self.process_response(sock)
                     except Exception as e:
                         print(f"Error processing response: {e}")
                         self.sock_close_exit(sock)
