@@ -29,6 +29,19 @@ def generate_rsa_keys():
 def generate_aes_key():
     return get_random_bytes(16)  # AES key of 128 bits
 
+# Function to encrypt data with an AES key
+def aes_basic_encrypt(message, aes_key):
+    cipher_aes = AES.new(aes_key, AES.MODE_CBC)
+    ct_bytes = cipher_aes.encrypt(pad(message, AES.block_size))
+    return cipher_aes.iv + ct_bytes  # Prepend the IV for transmission
+
+# Function to decrypt data with an AES key
+def aes_basic_decrypt(encrypted_message, aes_key):
+    iv = encrypted_message[:AES.block_size]  # Extract the IV from the beginning
+    cipher_aes = AES.new(aes_key, AES.MODE_CBC, iv)
+    original_message = unpad(cipher_aes.decrypt(encrypted_message[AES.block_size:]), AES.block_size)
+    return original_message
+
 # Function to encrypt data with an RSA public key
 def encrypt_with_rsa(message, public_key):
     cipher_rsa = PKCS1_OAEP.new(public_key)

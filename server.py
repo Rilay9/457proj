@@ -130,7 +130,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
             
             # Get rest of message
             the_rest = recv_all(sock, data_len)
-
+            the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
             # Parse username, should just be from after len to end
             new_name = the_rest[1:].decode()
             old_name = user.name
@@ -186,6 +186,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
         elif instr == 0x03:
 
             the_rest = recv_all(sock, data_len)
+            the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
 
             # Assigns the data given the appropriate offsets.
             # It seems that the last byte is 00 if there's no password
@@ -221,6 +222,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
         elif instr == 0x15:
             
             the_rest = recv_all(sock, data_len)
+            the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
 
             # Check if too many message requests
             if user.is_msg_overload():
@@ -263,6 +265,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
         elif instr == 0x12:
 
             the_rest = recv_all(sock, data_len)
+            the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
             
             # Check if too many message requests
             if user.is_msg_overload():
@@ -292,6 +295,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
         # If gets DM Request message
         elif instr == 0x82:
             the_rest = recv_all(sock, data_len)
+            the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
             aeskey = generate_aes_key()
 
             recv_uname_len = the_rest[0]

@@ -216,4 +216,5 @@ Target clients:
 Weaknesses (maybe to discuss?):
 Slow, as proof of concept in python
 Demand that you be out of room to change name (didn't use ids for dicts)
-Don't encrypt 
+If not dm, file transfer, or room msg, only encrypted with AES, no integrity checks or anything (we actually encrypt twice for the dm, file transfer, and room_msg)
+(time)

@@ -217,6 +217,8 @@ class ChatClient:
 
     def send_message(self, sock, instruction, data=b''):
         header = (len(data)).to_bytes(4, 'big') + b'\x04\x00'  # data_len, 0x04179a00
+        if self.server_aes_key is not None and data != b'':
+            data = aes_basic_encrypt(data)
         message = header + bytes([instruction]) + data
         b = sock.sendall(message)
 
