@@ -76,7 +76,8 @@ def accept_new(sock, sel: selectors.DefaultSelector):
         # all users. Went with a static one cos i was getting confused by dependencies
         length = int.from_bytes(header[0:4], 'big')
         key = RSA.import_key(recv_all(conn, length))
-        new_user = User(conn, key) 
+        aeskey = generate_aes_key()
+        new_user = User(conn, key, aeskey) 
 
         # Construct response components
         header_b = b'\x04\x17\x9b'
@@ -85,7 +86,8 @@ def accept_new(sock, sel: selectors.DefaultSelector):
         data_len = (username_len + 1).to_bytes(4, 'big') # Big endian to pad leading 0s
 
         # Concatenates all bytes together
-        send_buffer = data_len + header_b + username_len.to_bytes(1, 'little') + username_b
+        send_buffer = data_len + header_b + username_len.to_bytes(1, 'little') + username_b + \
+            encrypt_with_rsa(aeskey, new_user.rsa_pub)
 
         try:
             conn.sendall(send_buffer)
@@ -395,7 +397,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
         # Check if any users haven't updated in 30 seconds, and if they did, close them
         curr_time = time.time()
         users_to_remove = [] # Another list, in order to avoid changing dict in iter
-        # for user in User.all_users.values():
+        # for user in User.all_users.values(): fix
         #     if curr_time - user.time_last_updated > 30:
         #         users_to_remove.append(user)
                 

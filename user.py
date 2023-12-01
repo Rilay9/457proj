@@ -15,7 +15,7 @@ class User:
     all_users = {}
     
     # Create the user.
-    def __init__(self, sock: socket, rsapub) -> None:
+    def __init__(self, sock: socket, rsapub, aeskey) -> None:
         self.sock:socket = sock
         self.room = None
         self.time_last_updated = time.time()
@@ -23,7 +23,7 @@ class User:
         # Holds the last 4 times a message was sent in order to send error if 
         # sending too much. Should only be 4 or less, as it serves as a sliding window
         self.last_message_times = [] 
-        
+        self.server_aes_key = aeskey
         # Add randomly generated name. Hope this is fast enough.
         # Assumes there'll be less users than will cause the name to be larger than 256
         name_gen_count = 0

@@ -27,6 +27,7 @@ class ChatClient:
         self.aes_key_dict = {}
         self.sel = None
         self.callbacks = {}
+        self.server_aes_key = None
 
     def register_callback(self, instr, uname, function, *args):
         self.callbacks[(instr, uname)] = (function, args)
@@ -49,7 +50,7 @@ class ChatClient:
 
 
     def sock_close_exit(self, sock:socket, err=1):
-        self.heartbeat_thread.cancel()
+        # self.heartbeat_thread.cancel() fix
         try:
             sock.close()
         except:
@@ -102,10 +103,10 @@ class ChatClient:
 
         # Receive room message
         elif instr == 0x15:
-            uname_len = the_rest[2 + len(self.currroom)]
-            target_uname = the_rest[3+len(self.currroom):4+len(self.currroom)+uname_len].decode()
-            msg_len = int.from_bytes(the_rest[4+len(self.currroom)+uname_len:8+len(self.currroom)+uname_len], 'big')
-            message = the_rest[8+len(self.currroom)+uname_len:]
+            uname_len = the_rest[1 + len(self.currroom)]
+            target_uname = the_rest[2+len(self.currroom):2+len(self.currroom)+uname_len].decode()
+            msg_len = int.from_bytes(the_rest[3+len(self.currroom)+uname_len:7+len(self.currroom)+uname_len], 'big')
+            message = the_rest[7+len(self.currroom)+uname_len:]
             print(f"[{self.currroom}] < {target_uname}: {message}")
             
 
@@ -139,8 +140,10 @@ class ChatClient:
 
 
         elif instr == 0x9b:
-            print(f"Connected. Username is {the_rest[1:].decode('utf-8')}")
-            self.my_name = the_rest[1:].decode('utf-8')
+            uname_len = the_rest[0]
+            self.my_name = the_rest[1:uname_len+1].decode()
+            self.server_aes_key = decrypt_with_rsa(the_rest[uname_len+1:], self.rsa_priv)
+            print(f"Connected. Username is {self.my_name}")
 
         
         # Username changed confirmation. Update username
@@ -169,13 +172,13 @@ class ChatClient:
         # RSA Public key received
         elif instr == 0x81:
             roommate_len = the_rest[0]
-            target_uname = the_rest[1:roommate_len + 1]
-            self.public_key_dict[target_uname] = RSA.import_key(the_rest[roommate_len+3:])
+            target_uname = the_rest[1:roommate_len + 1].decode()
+            self.public_key_dict[target_uname] = RSA.import_key(the_rest[roommate_len+1:])
 
         # User doesn't exist response to DM Request
         elif instr == 0x94:
             roommate_len = the_rest[0]
-            target_uname = the_rest[1:roommate_len + 1]
+            target_uname = the_rest[1:roommate_len + 1].decode()
             print("User doesn't exist")
             self.callbacks.pop((instr, target_uname), 0)
 
@@ -186,7 +189,7 @@ class ChatClient:
         # AES DM key received
         elif instr == 0x80:
             uname_len = the_rest[0]
-            target_uname = the_rest[1:uname_len + 1]
+            target_uname = the_rest[1:uname_len + 1].decode()
             self.aes_key_dict[target_uname] = decrypt_with_rsa(the_rest[uname_len+3:], self.rsa_priv)
            
         # DM Request Response Message
@@ -218,7 +221,7 @@ class ChatClient:
         b = sock.sendall(message)
 
     def change_nickname(self, sock, new_nickname):
-        if self.currroom is None:
+        if self.currroom is not None:
             print("Please, please just leave the room before changing name.")
         else:    
             self.send_message(sock, 0x0f, len(new_nickname).to_bytes(1,'little') + new_nickname.encode('utf-8'))
@@ -347,7 +350,7 @@ class ChatClient:
                 sys.exit(1)
 
             # self.heartbeat_thread = threading.Timer(25, self.heartbeat, [sock])
-            # self.heartbeat_thread.start()
+            # self.heartbeat_thread.start() fix
 
             # Create poll(, select, or whatever's best) object
             self.sel = selectors.DefaultSelector()
