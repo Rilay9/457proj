@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 
+import math
 import socket
 import sys
 import argparse
 import selectors
 import threading
+import os
+import time
+
 from typing import List
 from Cryptostuff import *
 
@@ -28,9 +32,16 @@ class ChatClient:
         self.sel = None
         self.callbacks = {}
         self.server_aes_key = None
+        self.currfile = None 
+        self.lastFileUpdateTime = None
+        self.chunks = None
+        self.fileTransferPartner = None
 
     def register_callback(self, instr, uname, function, *args):
-        self.callbacks[(instr, uname)] = (function, args)
+        if (instr, uname) in self.callbacks:
+            self.callbacks[(instr, uname)] = self.callbacks[(instr, uname)].append((function, args))
+        else:
+            self.callbacks[(instr, uname)] = [(function, args)]
     
     
     def is_socket_closed(self, sock):
@@ -52,12 +63,31 @@ class ChatClient:
     def sock_close_exit(self, sock:socket, err=1):
         # self.heartbeat_thread.cancel() fix
         try:
+            if self.currfile is not None:
+                self.currfile.close()
             sock.close()
         except:
             pass
         finally:
             sys.exit(err)
 
+    # Sends a file piece
+    def send_file_piece(self, target):
+        if self.currfile is not None:
+            data = len(target).to_bytes(1, 'little') + str(target).encode('utf-8')
+            self.lastFileUpdateTime = time.time()
+            currdata = self.currfile.read(100)
+            if currdata == '':
+
+                self.send_message(self.sock, 0x66, data)
+                self.fileTransferPartner = None
+                self.lastFileUpdateTime = None
+                self.currfile.close()
+                self.currfile = None
+            else:
+                data_en = encrypt_overall_with_iv(currdata)
+                self.send_message(self.sock, 0x64, data + data_en)
+                self.chunks = self.chunks - 1
 
     # A receive all function for the socket (keep receiving until all bytes gotten)
     # Returns none if nothing more to receive
@@ -185,24 +215,98 @@ class ChatClient:
             target_uname = the_rest[1:roommate_len + 1].decode()
             self.public_key_dict[target_uname] = RSA.import_key(the_rest[roommate_len+1:])
 
-        # User doesn't exist response to DM Request
-        elif instr == 0x94:
+        # User doesn't exist response to DM Request or file transfer
+        elif instr == 0x94 or instr == 0x95:
             roommate_len = the_rest[0]
             target_uname = the_rest[1:roommate_len + 1].decode()
-            print("User doesn't exist")
+            print("User doesn't exist to file transfer to")
             self.callbacks.pop((instr, target_uname), 0)
+
+            if instr == 0x95:
+                try:
+                    self.currfile.close()
+                    self.currfile = None
+                    self.fileTransferPartner = None
+                    self.lastFileUpdateTime = None
+                except:
+                    pass
 
         # AES room key received
         elif instr == 0x84:
             self.room_aes_key = the_rest
 
-        # AES DM key received
-        elif instr == 0x80:
-            uname_len = the_rest[0]
-            target_uname = the_rest[1:uname_len + 1].decode()
-            self.aes_key_dict[target_uname] = the_rest[uname_len+3:]
-           
-        # DM Request Response Message
+        # File transfer request received
+        elif instr == 0x62:
+            if self.currfile is not None:
+                print("File transfer request received but already processing another.")
+            else:
+                
+                r_uname_len = the_rest[0]
+                r_uname = the_rest[1:roommate_len + 1].decode()
+                filename_len = the_rest[roommate_len + 1]
+                filename = the_rest[roommate_len + 2:roommate_len + 2 + filename_len].decode()
+                chunks = int.from_bytes(the_rest[roommate_len + 2 + filename_len:roommate_len + 4 + filename_len], 'little')
+                filesize = int.from_bytes(the_rest[roommate_len + 4 + filename_len:], 'little')
+                response:str = input(f"File transfer request received from User {r_uname} of size {filesize} bytes. Accept? Y/N")
+                while(response.upper() not in ("Y", "N")):
+                   response = input("Invalid response. Accept file? Y/N ")
+
+                if (response == "Y"):
+                    data = the_rest[0:roommate_len + 1] + len(self.my_name).to_bytes(1, 'little') + self.my_name.encode()
+                    self.send_message(self.sock, 0x63, data)
+                    if os.path.exists(filename):
+                        filename = filename + "_new"
+                    self.chunks = chunks
+                    self.currfile = open(filename, 'wb')
+                    self.lastFileUpdateTime = time.time()
+                    self.fileTransferPartner = r_uname
+
+        # File transfer request accepted
+        elif instr == 0x63:
+            r_uname_len = the_rest[0]
+            r_uname = the_rest[1:roommate_len + 1].decode()
+            self.fileTransferPartner = r_uname
+            print(f"File transfer request accepted by {r_uname}. Sending file...")
+            self.send_file_piece()
+
+        # File transfer piece received
+        elif instr == 0x64:
+            self.lastFileUpdateTime = time.time()
+            try:
+ 
+                data = decrypt_overall_with_iv(the_rest, self.public_key_dict[self.fileTransferPartner],
+                                                self.aes_key_dict[self.fileTransferPartner])
+            except:
+                print("File decryption and/or authentication failed.")
+                self.currfile.close()
+                self.currfile = None
+                self.chunks = None
+                self.fileTransferPartner = None
+                self.lastFileUpdateTime = None               
+
+            self.currfile.write(data)
+            self.chunks = self.chunks - 1
+            self.send_message(self.sock, 0x65,
+                               len(self.fileTransferPartner).to_bytes(1, 'little') +
+                                 str(self.fileTransferPartner).encode('utf-8'))
+        
+        # File transmission ack received
+        elif instr == 0x65:
+            self.send_file_piece(self.fileTransferPartner)
+
+        # File transmission complete received
+        elif instr == 0x66:
+            self.currfile.close()
+            if self.chunks != 0:
+                print("Error receiving file transfer. Please try again.")
+            else:
+                print("File transfer complete.")
+            self.currfile = None
+            self.chunks = None
+            self.fileTransferPartner = None
+            self.lastFileUpdateTime = None    
+
+        # AES and public keys for DMs and file transfers
         elif instr == 0x89:
             target_uname_len = the_rest[0]
             target_uname = the_rest[1:target_uname_len+1].decode()
@@ -220,8 +324,8 @@ class ChatClient:
         # Check if there's a registered callback
         callback_key = (instr, target_uname)
         if callback_key in self.callbacks:
-            function, args = self.callbacks[callback_key]
-            function(*args)
+            for (function, args) in self.callbacks[callback_key]:
+                function(*args)
             del self.callbacks[callback_key]  # Remove the callback after calling it
 
 
@@ -235,8 +339,8 @@ class ChatClient:
         b = sock.sendall(message)
 
     def change_nickname(self, sock, new_nickname):
-        if self.currroom is not None:
-            print("Please, please just leave the room before changing name.")
+        if self.currroom is not None or self.currfile is not None:
+            print("Please, please just leave the room and/or finish file transfer before changing name.")
         else:    
             self.send_message(sock, 0x0f, len(new_nickname).to_bytes(1,'little') + new_nickname.encode('utf-8'))
 
@@ -260,7 +364,7 @@ class ChatClient:
 
     def send_direct_message(self, sock, username, message):
         
-        if username not in self.aes_key_dict.keys():
+        if username not in self.aes_key_dict:
             self.send_message(sock, 0x82, len(username).to_bytes(1,'little') + username.encode())
             self.register_callback(0x89, username, self.send_direct_message, sock, username, message)
         else:
@@ -278,10 +382,31 @@ class ChatClient:
             data = len(username).to_bytes(1, 'little') + str(username).encode('utf-8') + b'\x00'
         self.send_message(sock, 0x03, data)
         
-    def file_xfer(self, username, file_path):
-        # TODO
-        print("this is the file transfer function: ", username, file_path)
-        return 0
+    def file_xfer_init(self, username, file_path):
+        if self.currfile is not None:
+            print("Already in middle of sending or receiving file.")
+            return
+        
+        if not os.path.isfile(file_path) or os.path.getsize(file_path) == 0:
+            print("File doesn't exist, is empty, or isn't a file")
+        else:
+            
+            if username in self.aes_key_dict and username in self.public_key_dict:
+            
+                self.currfile = open(file_path, 'rb')
+                self.lastFileUpdateTime = time.time()
+                filesize = os.path.getsize(file_path)
+                self.chunks = math.ceil(filesize / 100.0)
+                filename = os.path.basename(file_path)
+                data = len(username).to_bytes(1, 'little') + username.encode() + \
+                    len(filename).to_bytes(1, 'little') + filename.encode() + self.chunks.to_bytes(2, 'little') + \
+                        filesize.to_bytes(5, 'little')
+
+                self.send_message(self.sock, 0x62, data)
+                print("File transfer request sent.")
+            else:
+                self.send_message(self.sock, 0x61, len(username).to_bytes(1, 'little') + username.encode())
+                self.register_callback(0x89, username, self.file_xfer_init, username, file_path)
 
 
     def leave_room_or_server(self, sock):
@@ -289,6 +414,7 @@ class ChatClient:
 
     def heartbeat(self, sock, interval=25):
         self.send_message(sock, 0x13, False)
+
 
     def check_for_messages(self, sock, sel, check_for_messagetypes=[], check_for_uname = ""):
         #  Loop over sockets and process them accordingly
@@ -310,7 +436,7 @@ class ChatClient:
                 if key.fileobj == sock:
                     
                     if self.is_socket_closed(sock):
-                        self.sock_close_exit(sock)
+                        self.sock_close_exit(sock, 0)
                     
                     try:
                         ret = self.process_response(sock)
@@ -344,7 +470,7 @@ class ChatClient:
                     elif command == 'file_xfer':
                         username = input("Enter username to send file to: ")
                         file_path = input("Enter file path: ")
-                        self.file_xfer(username, file_path)
+                        self.file_xfer_init(username, file_path)
                     elif command == 'leave':
                         self.leave_room_or_server(sock)
                     elif command == 'quit':
@@ -352,6 +478,19 @@ class ChatClient:
                         self.sock_close_exit(sock, 0)
                     else:
                         print("usage: nick, list_users, list_rooms, send_msg,\nmsg_room join_room, file_xfer, leave, quit")
+
+        if self.currfile is not None:
+            currTime = time.time()
+            if currTime - self.lastFileUpdateTime > 30:
+                try:
+                    print("File transfer timed out or ignored. Try again later.")
+                    self.currfile.close()
+                    self.currfile = None
+                    self.chunks = None
+                    self.fileTransferPartner = None
+                    self.lastFileUpdateTime = None
+                except:
+                    pass
 
     def run(self):
 

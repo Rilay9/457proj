@@ -99,7 +99,12 @@ NEW MESSAGE TYPES (make into functions?):
     Sends back a message: targetuname_len + targetuname + public_key_len + public_key + aes_key
     (AES key is 16 bytes)
 - File transmission messages (see end)
-
+0x61 - File transfer to-server request (doesn't have keys, so asks for them)
+0x62 - File transfer to-client request (asks if willing to accept file)
+0x63 - File transfer accept (start transmission)
+0x64 - File transfer piece
+0x65 - File transfer piece ack
+0x66 - File transfer complete
 More messages from server:
 0x9b - Connected. Gives username
 0x90 - Username changed confirm. Includes new username
@@ -107,7 +112,7 @@ More messages from server:
 0x93 - Room create confirm. Includes room name
 0x92 - Room leave confirm
 0x94 - User doesn't exist for DM
-
+0x95 - User doesn't exist for file transfer
 3.1: Basic Chat
     
     a)  High-Level: The application will consist of a central server program and the user client     
@@ -221,3 +226,8 @@ Btw, in order to read usernames but not have them obvious, encrypted msg again
 with servers AES for dm and room msg
 Empty message error checks? msg length is probably limited
 Couldn't encrypt the RSA public keys with AES, which is fine, but just the implementation had to be tweaked
+
+
+New file transfer:
+Sender Client:
+    1. Checks if the file exists and if 

@@ -20,6 +20,7 @@ class User:
         # sending too much. Should only be 4 or less, as it serves as a sliding window
         self.last_message_times = [] 
         self.server_aes_key = aeskey
+        
         # Add randomly generated name. Hope this is fast enough.
         # Assumes there'll be less users than will cause the name to be larger than 256
         name_gen_count = 0

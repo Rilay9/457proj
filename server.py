@@ -291,6 +291,69 @@ def process_client_msg(key: selectors.SelectorKey, sel):
                         + msg_len.to_bytes(4, 'big')+ msg_b
                     send_message(recv_user.sock, 0x12, recv_user, data)
 
+        # File transfer request (doesn't need keys). Just forward
+        elif instr == 0x62:
+            
+            the_rest = recv_all(sock, data_len)
+            the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
+
+            # Get the info based on offsets
+            recv_uname_len = the_rest[0]
+            recv_uname = the_rest[1:1+recv_uname_len].decode()
+            data = len(user.name).to_bytes(1, 'little') + user.name.encode() + the_rest[1+recv_uname_len:]
+
+            # If user doesn't exists send, user doesn't exist message
+            if recv_uname not in User.all_users:
+                send_message(user.sock, 0x95, user, the_rest[0:1+recv_uname_len])
+            
+            else:
+                # Forward request
+                send_message(User.all_users[recv_uname].sock, 0x62, User.all_users[recv_uname], data)
+                        
+
+        # File transfer accept, piece, ack, or complete. Just forward to the right place
+        elif instr == 0x63 or instr == 0x64 or instr == 0x65 or instr == 0x66:
+            the_rest = recv_all(sock, data_len)
+            the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
+
+            # Get the info based on offsets
+            recv_uname_len = the_rest[0]
+            recv_uname = the_rest[1:1+recv_uname_len].decode()
+            data = the_rest[1+recv_uname_len:]
+
+            send_message(User.all_users[recv_uname].sock, instr, User.all_users[recv_uname], data)
+
+        
+        # File transfer request (needs keys) (should join this with the next one but no time)
+        elif instr == 0x61:
+
+            the_rest = recv_all(sock, data_len)
+            the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
+
+            # Get the info based on offsets
+            recv_uname_len = the_rest[0]
+            recv_uname = the_rest[1:1+recv_uname_len].decode()
+
+            # If user doesn't exists send, user doesn't exist message
+            if recv_uname not in User.all_users:
+                send_message(user.sock, 0x94, user, the_rest[0:1+recv_uname_len])
+            
+            else:
+                
+                # Send target public key and aes key encrypted with user key to user
+                pubkey1 = User.all_users[recv_uname].rsa_pub.export_key()
+                encaes1 = aeskey
+                data1 = the_rest[0:1+recv_uname_len] + len(pubkey1).to_bytes(3, 'little') + \
+                    pubkey1 + encaes1
+                
+                # Send user public key and aes key encrypted with target key to target
+                pubkey2 = user.rsa_pub.export_key()
+                encaes2 = aeskey
+                data2 = len(user.name).to_bytes(1, 'little') + user.name.encode() + len(pubkey2).to_bytes(3, 'little') + \
+                    pubkey2 + encaes2
+
+                send_message(user.sock, 0x89, user, data1)
+                send_message(User.all_users[recv_uname].sock, 0x89, User.all_users[recv_uname], data2)
 
         # If gets DM Request message
         elif instr == 0x82:
@@ -302,7 +365,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
             recv_uname = the_rest[1:1+recv_uname_len].decode()
 
             # If user doesn't exists send, user doesn't exist message
-            if recv_uname not in User.all_users.keys():
+            if recv_uname not in User.all_users:
                 send_message(user.sock, 0x94, user, the_rest[0:1+recv_uname_len])
             
             else:
