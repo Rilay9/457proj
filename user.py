@@ -68,11 +68,11 @@ class User:
         old_time = self.time_last_updated
         self.time_last_updated = time.time()
 
-        if self.time_last_updated - old_time >= 25:
+        # if self.time_last_updated - old_time >= 25: fix
             
-            # Just realized I could paste the correct bytes to send in their entirety
-            # I understand the message
-            self.send_message(self.sock, 0x9a, b'Careful, server times out client after 30 seconds of inactivity.')
+        #     # Just realized I could paste the correct bytes to send in their entirety
+        #     # I understand the message
+        #     self.send_message(self.sock, 0x9a, b'Careful, server times out client after 30 seconds of inactivity.')
 
     
     # Leaves room. Called from room remove() function, which is called only

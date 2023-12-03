@@ -465,9 +465,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
         # Check if any users haven't updated in 30 seconds, and if they did, close them
         curr_time = time.time()
         users_to_remove = [] # Another list, in order to avoid changing dict in iter
-        for user in User.all_users.values():
-            if curr_time - user.time_last_updated > 30:
-                users_to_remove.append(user)
+        # for user in User.all_users.values(): fix
+        #     if curr_time - user.time_last_updated > 30:
+        #         users_to_remove.append(user)
                 
         # Remove the users
         for user in users_to_remove:        
