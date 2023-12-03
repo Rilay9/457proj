@@ -61,7 +61,7 @@ class ChatClient:
 
 
     def sock_close_exit(self, sock:socket, err=1):
-        # self.heartbeat_thread.cancel() fix
+        self.heartbeat_thread.cancel()
         try:
             if self.currfile is not None:
                 self.currfile.close()
@@ -84,6 +84,7 @@ class ChatClient:
                 self.lastFileUpdateTime = None
                 self.currfile.close()
                 self.currfile = None
+                print("File Transfer Complete.")
             else:
                 data_en = encrypt_overall_with_iv(currdata, self.rsa_priv, self.aes_key_dict[self.fileTransferPartner])
                 self.send_message(self.sock, 0x64, data + data_en)
@@ -505,8 +506,8 @@ class ChatClient:
                 print(f"Error connecting to server: {e}")
                 sys.exit(1)
 
-            # self.heartbeat_thread = threading.Timer(25, self.heartbeat, [sock])
-            # self.heartbeat_thread.start() fix
+            self.heartbeat_thread = threading.Timer(25, self.heartbeat, [sock])
+            self.heartbeat_thread.start()
 
             # Create poll(, select, or whatever's best) object
             self.sel = selectors.DefaultSelector()

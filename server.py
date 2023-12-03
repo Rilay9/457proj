@@ -330,7 +330,7 @@ def process_client_msg(key: selectors.SelectorKey, sel):
             the_rest = recv_all(sock, data_len)
             the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
             aeskey = generate_aes_key()
-            
+
             # Get the info based on offsets
             recv_uname_len = the_rest[0]
             recv_uname = the_rest[1:1+recv_uname_len].decode()
@@ -465,9 +465,9 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serv_sock:
         # Check if any users haven't updated in 30 seconds, and if they did, close them
         curr_time = time.time()
         users_to_remove = [] # Another list, in order to avoid changing dict in iter
-        # for user in User.all_users.values(): fix
-        #     if curr_time - user.time_last_updated > 30:
-        #         users_to_remove.append(user)
+        for user in User.all_users.values():
+            if curr_time - user.time_last_updated > 30:
+                users_to_remove.append(user)
                 
         # Remove the users
         for user in users_to_remove:        
