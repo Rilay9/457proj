@@ -39,3 +39,4 @@ client
 
 # various
 *.pdf
+*.pyc
