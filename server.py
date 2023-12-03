@@ -329,7 +329,8 @@ def process_client_msg(key: selectors.SelectorKey, sel):
 
             the_rest = recv_all(sock, data_len)
             the_rest = aes_basic_decrypt(the_rest, user.server_aes_key)
-
+            aeskey = generate_aes_key()
+            
             # Get the info based on offsets
             recv_uname_len = the_rest[0]
             recv_uname = the_rest[1:1+recv_uname_len].decode()

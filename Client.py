@@ -76,8 +76,8 @@ class ChatClient:
         if self.currfile is not None:
             data = len(target).to_bytes(1, 'little') + str(target).encode('utf-8')
             self.lastFileUpdateTime = time.time()
-            currdata = self.currfile.read(100)
-            if currdata == '':
+            currdata = self.currfile.read(300)
+            if currdata == b'':
 
                 self.send_message(self.sock, 0x66, data)
                 self.fileTransferPartner = None
@@ -85,7 +85,7 @@ class ChatClient:
                 self.currfile.close()
                 self.currfile = None
             else:
-                data_en = encrypt_overall_with_iv(currdata)
+                data_en = encrypt_overall_with_iv(currdata, self.rsa_priv, self.aes_key_dict[self.fileTransferPartner])
                 self.send_message(self.sock, 0x64, data + data_en)
                 self.chunks = self.chunks - 1
 
@@ -242,17 +242,17 @@ class ChatClient:
             else:
                 
                 r_uname_len = the_rest[0]
-                r_uname = the_rest[1:roommate_len + 1].decode()
-                filename_len = the_rest[roommate_len + 1]
-                filename = the_rest[roommate_len + 2:roommate_len + 2 + filename_len].decode()
-                chunks = int.from_bytes(the_rest[roommate_len + 2 + filename_len:roommate_len + 4 + filename_len], 'little')
-                filesize = int.from_bytes(the_rest[roommate_len + 4 + filename_len:], 'little')
-                response:str = input(f"File transfer request received from User {r_uname} of size {filesize} bytes. Accept? Y/N")
+                r_uname = the_rest[1:r_uname_len + 1].decode()
+                filename_len = the_rest[r_uname_len + 1]
+                filename = the_rest[r_uname_len + 2:r_uname_len + 2 + filename_len].decode()
+                chunks = int.from_bytes(the_rest[r_uname_len + 2 + filename_len:r_uname_len + 4 + filename_len], 'little')
+                filesize = int.from_bytes(the_rest[r_uname_len + 4 + filename_len:], 'little')
+                response:str = input(f"File transfer request received from User {r_uname} of size {filesize} bytes. Accept? Y/N:  ")
                 while(response.upper() not in ("Y", "N")):
-                   response = input("Invalid response. Accept file? Y/N ")
+                   response = input("Invalid response. Accept file? Y/N:    ")
 
                 if (response == "Y"):
-                    data = the_rest[0:roommate_len + 1] + len(self.my_name).to_bytes(1, 'little') + self.my_name.encode()
+                    data = the_rest[0:r_uname_len + 1] + len(self.my_name).to_bytes(1, 'little') + self.my_name.encode()
                     self.send_message(self.sock, 0x63, data)
                     if os.path.exists(filename):
                         filename = filename + "_new"
@@ -264,10 +264,10 @@ class ChatClient:
         # File transfer request accepted
         elif instr == 0x63:
             r_uname_len = the_rest[0]
-            r_uname = the_rest[1:roommate_len + 1].decode()
+            r_uname = the_rest[1:r_uname_len + 1].decode()
             self.fileTransferPartner = r_uname
             print(f"File transfer request accepted by {r_uname}. Sending file...")
-            self.send_file_piece()
+            self.send_file_piece(r_uname)
 
         # File transfer piece received
         elif instr == 0x64:
@@ -396,7 +396,7 @@ class ChatClient:
                 self.currfile = open(file_path, 'rb')
                 self.lastFileUpdateTime = time.time()
                 filesize = os.path.getsize(file_path)
-                self.chunks = math.ceil(filesize / 100.0)
+                self.chunks = math.ceil(filesize / 300.0)
                 filename = os.path.basename(file_path)
                 data = len(username).to_bytes(1, 'little') + username.encode() + \
                     len(filename).to_bytes(1, 'little') + filename.encode() + self.chunks.to_bytes(2, 'little') + \
