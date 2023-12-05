@@ -1,3 +1,4 @@
+import timeit
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Hash import SHA256
@@ -125,19 +126,43 @@ def decrypt_overall_with_iv(encrypted_data_with_iv, rsa_public_key, aes_key):
     else:
         raise ValueError("The signature is not valid. Message integrity compromised!")
 
-# # Sample usage:
-# rsa_private_key, rsa_public_key = generate_rsa_keys()  # RSA keys
-# aes_key = generate_aes_key()  # AES shared key
-# message = b'Hello, this is a secret message!'  # Your message
+# Sample usage:
+rsa_private_key, rsa_public_key = generate_rsa_keys()  # RSA keys
+elapsed_time = timeit.timeit(lambda: generate_rsa_keys(), number=20)
+print(f"Rsa Key generation takes {elapsed_time / 20} seconds")
+aes_key = generate_aes_key()  # AES shared key
+elapsed_time = timeit.timeit(lambda: generate_aes_key(), number=20)
+print(f"AES Key generation takes {elapsed_time / 20} seconds")
+message = b'Hello, this is a secret message!'  # Your message
 
-# # Encrypt the message as Party A
-# encrypted_data_with_iv = encrypt_overall_with_iv(message, rsa_private_key, aes_key)
+# Timing the signing process
+sign_timing = timeit.timeit(
+    lambda: sign_hash(hash(message), rsa_private_key),
+    number=20
+)
+print(f"Avg time taken to sign a hash: {sign_timing / 20} seconds")
 
-# # Decrypt the message as Party B
-# try:
-#     decrypted_message = decrypt_overall_with_iv(encrypted_data_with_iv, rsa_public_key, aes_key)
-# except ValueError as e:
-#     decrypted_message = str(e)
+# Timing the verifying process
+signature = sign_hash(hash(message), rsa_private_key)
+verify_timing = timeit.timeit(
+    lambda: verify_hash(hash(message), signature, rsa_public_key),
+    number=20
+)
+print(f"Avg time taken to verify a signature: {verify_timing / 20} seconds")
 
-# # Show the decrypted message
-# print(decrypted_message)
+
+# Encrypt the message as Party A
+encrypted_data_with_iv = encrypt_overall_with_iv(message, rsa_private_key, aes_key)
+elapsed_time = timeit.timeit(lambda: encrypt_overall_with_iv(message, rsa_private_key, aes_key), number=20)
+print(f"Overall encryption process as described in slide 22 takes {elapsed_time / 20} seconds")
+# Decrypt the message as Party B
+try:
+    decrypted_message = decrypt_overall_with_iv(encrypted_data_with_iv, rsa_public_key, aes_key)
+    elapsed_time = timeit.timeit(lambda: decrypt_overall_with_iv(encrypted_data_with_iv, rsa_public_key, aes_key), number=20)
+    print(f"Overall decryption process as described in slide 22 takes {elapsed_time / 20} seconds")
+
+except ValueError as e:
+    decrypted_message = str(e)
+
+# Show the decrypted message
+print(decrypted_message)

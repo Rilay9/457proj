@@ -36,6 +36,7 @@ class ChatClient:
         self.lastFileUpdateTime = None
         self.chunks = None
         self.fileTransferPartner = None
+        self.filetransferstartTime = None
 
     def register_callback(self, instr, uname, function, *args):
         if (instr, uname) in self.callbacks:
@@ -76,7 +77,7 @@ class ChatClient:
         if self.currfile is not None:
             data = len(target).to_bytes(1, 'little') + str(target).encode('utf-8')
             self.lastFileUpdateTime = time.time()
-            currdata = self.currfile.read(300)
+            currdata = self.currfile.read(10000)
             if currdata == b'':
 
                 self.send_message(self.sock, 0x66, data)
@@ -256,11 +257,13 @@ class ChatClient:
                     data = the_rest[0:r_uname_len + 1] + len(self.my_name).to_bytes(1, 'little') + self.my_name.encode()
                     self.send_message(self.sock, 0x63, data)
                     if os.path.exists(filename):
-                        filename = filename + "_new"
+                            name, extension = os.path.splitext(filename)
+                            filename = name + "_new" + extension
                     self.chunks = chunks
                     self.currfile = open(filename, 'wb')
                     self.lastFileUpdateTime = time.time()
                     self.fileTransferPartner = r_uname
+                    self.filetransferstartTime = time.time()
 
         # File transfer request accepted
         elif instr == 0x63:
@@ -301,7 +304,7 @@ class ChatClient:
             if self.chunks != 0:
                 print("Error receiving file transfer. Please try again.")
             else:
-                print("File transfer complete.")
+                print(f"File transfer complete. Transfer time of {time.time() - self.filetransferstartTime} seconds.")
             self.currfile = None
             self.chunks = None
             self.fileTransferPartner = None
@@ -397,7 +400,7 @@ class ChatClient:
                 self.currfile = open(file_path, 'rb')
                 self.lastFileUpdateTime = time.time()
                 filesize = os.path.getsize(file_path)
-                self.chunks = math.ceil(filesize / 300.0)
+                self.chunks = math.ceil(filesize / 10000.0)
                 filename = os.path.basename(file_path)
                 data = len(username).to_bytes(1, 'little') + username.encode() + \
                     len(filename).to_bytes(1, 'little') + filename.encode() + self.chunks.to_bytes(2, 'little') + \
