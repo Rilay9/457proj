@@ -1,3 +1,10 @@
+To run the code, use the arguments as described in the .vscode launch.json. Create server, then clients.
+
+
+
+These are notes that aren't necessarily accurate:
+
+
 
 Maybe keep users and rooms unsorted, and add them to list and then sort that
 list when giving list of names
